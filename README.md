@@ -1,6 +1,6 @@
 # Project Guardian MCP
 
-A focused Model Context Protocol (MCP) server designed as your project's memory system and workflow guardian. This server provides streamlined database operations and advanced knowledge graph capabilities for intelligent project management, with exactly 17 tools to maintain clarity and focus.
+A focused Model Context Protocol (MCP) server designed as your project's memory system and workflow guardian. This server provides streamlined database operations and advanced knowledge graph capabilities for intelligent project management, with exactly 17 tools, 10 resources, and 27 prompts to maintain clarity and focus.
 
 ## Features
 
@@ -20,8 +20,8 @@ A focused Model Context Protocol (MCP) server designed as your project's memory 
 - **17 Tools Total**: Focused toolset for maximum clarity
 
 ### AI Guidance System
-- **11 Resources**: Templates, best practices, cached data, and comprehensive project status
-- **14 Prompts**: Comprehensive pre-built workflows for all aspects of project management
+- **10 Resources**: Templates, best practices, cached data, and comprehensive project status
+- **27 Prompts**: Comprehensive pre-built workflows for all aspects of project management
 - **Expert Guidance**: Step-by-step instructions for complex operations
 - **Contextual Help**: Adaptive prompts based on user needs
 - **Knowledge Base**: Comprehensive project management wisdom
@@ -214,7 +214,7 @@ Project Guardian MCP includes comprehensive resources and prompts to help AI mod
 
 ### Available Resources
 
-Project Guardian provides **11 key resources** that AI models can read to understand project management concepts, access cached data, and get comprehensive project insights:
+Project Guardian provides **10 key resources** that AI models can read to understand project management concepts, access cached data, and get comprehensive project insights:
 
 #### `project-guardian://templates/entity-types`
 Standard entity types for project management with examples and usage guidelines.
@@ -248,7 +248,7 @@ Recent additions, updates, and modifications to the knowledge graph for audit an
 
 ### Available Prompts
 
-Project Guardian offers **28 specialized prompts** covering all aspects of comprehensive project management, from basic setup to advanced enterprise workflows:
+Project Guardian offers **27 specialized prompts** covering all aspects of comprehensive project management, from basic setup to advanced enterprise workflows:
 
 #### Core Project Management
 #### `project-setup` - Project Initialization
@@ -591,25 +591,59 @@ Add this server to your Claude Desktop configuration (`claude_desktop_config.jso
 project-guardian-mcp-server/
 ├── src/
 │   ├── index.ts              # Main entry point
-│   ├── server.ts             # MCP server implementation with all handlers
+│   ├── server.ts             # MCP server orchestrator (161 lines, fully modularized)
 │   ├── memory-manager.ts     # Knowledge graph and entity management
 │   ├── sqlite-manager.ts     # Database operations and connection management
 │   ├── import-export.ts      # CSV/JSON data import and export functionality
-│   └── types.ts              # TypeScript type definitions and schemas
-├── __tests__/                # Test files
+│   ├── types.ts              # TypeScript type definitions and schemas
+│   ├── handlers/
+│   │   └── request-handlers.ts # Central tool execution dispatcher
+│   ├── tools/
+│   │   ├── tool-registry.ts     # Tool definitions and listing
+│   │   ├── database-tools.ts    # Database operation tool schemas
+│   │   └── memory-tools.ts      # Memory management tool schemas
+│   ├── resources/
+│   │   ├── resource-registry.ts  # Resource definitions and handlers
+│   │   ├── resource-definitions.ts # Static resource metadata
+│   │   └── resource-handlers.ts   # Dynamic resource content generation
+│   └── prompts/
+│       ├── prompt-registry.ts    # Prompt definitions and handlers
+│       ├── prompt-definitions.ts # Static prompt metadata
+│       └── prompt-handlers.ts    # Dynamic prompt content generation
+├── __tests__/                # Comprehensive test suite
+│   ├── tool-registry.test.ts
+│   ├── resource-registry.test.ts
+│   ├── prompt-registry.test.ts
+│   ├── request-handlers.test.ts
 │   ├── import-export.test.ts
 │   └── sqlite-manager.test.ts
-├── dist/                     # Compiled JavaScript output
+├── dist/                     # Compiled JavaScript output (optimized for production)
 ├── memory.db                 # SQLite database file (created on first run)
 ├── package.json              # Project dependencies and scripts
+├── package.prod.json         # Production-only dependencies for smaller bundle
 ├── tsconfig.json            # TypeScript configuration
 ├── jest.config.js           # Test configuration
+├── Dockerfile               # Multi-stage production container
+├── .dockerignore           # Docker build optimization
 └── README.md                # This documentation
 ```
 
 ### Key Components
 
-- **server.ts**: Core MCP server with tool and resource handlers for all 17 tools and 11 resources
+- **server.ts**: Clean orchestrator (161 lines) coordinating modular components
+- **handlers/request-handlers.ts**: Central dispatcher routing tool calls to appropriate managers
+- **tools/**: Tool definition and registration system (17 tools total)
+  - `tool-registry.ts`: Lists all available tools
+  - `database-tools.ts`: Database operation schemas (7 tools)
+  - `memory-tools.ts`: Memory management schemas (10 tools)
+- **resources/**: Resource management system (11 resources total)
+  - `resource-registry.ts`: Resource listing and content serving
+  - `resource-definitions.ts`: Static resource metadata
+  - `resource-handlers.ts`: Dynamic content generation
+- **prompts/**: Prompt management system (28 prompts total)
+  - `prompt-registry.ts`: Prompt listing and content serving
+  - `prompt-definitions.ts`: Static prompt metadata
+  - `prompt-handlers.ts`: Dynamic prompt generation with context
 - **memory-manager.ts**: Knowledge graph operations for entities, relationships, and observations
 - **sqlite-manager.ts**: Database abstraction layer with connection pooling and schema management
 - **import-export.ts**: Data transfer utilities for CSV and JSON formats

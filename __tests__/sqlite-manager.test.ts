@@ -1,26 +1,33 @@
 import { SQLiteManager } from '../src/sqlite-manager';
-import { existsSync, unlinkSync } from 'fs';
+import { existsSync, unlinkSync, rmdirSync } from 'fs';
 import { join } from 'path';
 
 describe('SQLiteManager', () => {
   let sqliteManager: SQLiteManager;
-  const testDbPath = './test-databases';
+  let testDbPath: string;
 
   beforeEach(() => {
+    // Use unique test directory for each test to avoid conflicts
+    testDbPath = `./test-databases-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     sqliteManager = new SQLiteManager(testDbPath);
   });
 
   afterEach(async () => {
     await sqliteManager.closeAllConnections();
     // Clean up test databases
-    if (existsSync(testDbPath)) {
-      const fs = require('fs');
-      const files = fs.readdirSync(testDbPath);
-      for (const file of files) {
-        if (file.endsWith('.db')) {
-          unlinkSync(join(testDbPath, file));
+    try {
+      if (existsSync(testDbPath)) {
+        const fs = require('fs');
+        const files = fs.readdirSync(testDbPath);
+        for (const file of files) {
+          if (file.endsWith('.db')) {
+            unlinkSync(join(testDbPath, file));
+          }
         }
+        rmdirSync(testDbPath);
       }
+    } catch (error) {
+      // Ignore cleanup errors
     }
   });
 
@@ -35,9 +42,17 @@ describe('SQLiteManager', () => {
     });
 
     test('should not create duplicate database', async () => {
-      await sqliteManager.createDatabase('test_db');
+      const firstResult = await sqliteManager.createDatabase('test_db');
+      expect(firstResult.success).toBe(true);
+
+      // Verify file exists
+      const fs = require('fs');
+      const path = require('path');
+      const dbPath = path.join(testDbPath, 'test_db.db');
+      expect(fs.existsSync(dbPath)).toBe(true);
+
       const result = await sqliteManager.createDatabase('test_db');
-      
+
       expect(result.success).toBe(false);
       expect(result.message).toContain('already exists');
     });
@@ -45,13 +60,15 @@ describe('SQLiteManager', () => {
     test('should list databases', async () => {
       await sqliteManager.createDatabase('test_db1');
       await sqliteManager.createDatabase('test_db2');
-      
+
       const result = await sqliteManager.listDatabases();
-      
+
       expect(result.success).toBe(true);
-      expect(result.data).toHaveLength(2);
-      expect(result.data[0]).toHaveProperty('name');
-      expect(result.data[0]).toHaveProperty('type', 'sqlite');
+      expect(result.data.length).toBeGreaterThanOrEqual(3); // memory + test_db1 + test_db2
+      const testDbs = result.data.filter(db => db.name.startsWith('test_db'));
+      expect(testDbs).toHaveLength(2);
+      expect(testDbs[0]).toHaveProperty('name');
+      expect(testDbs[0]).toHaveProperty('type', 'sqlite');
     });
 
     test('should drop database', async () => {

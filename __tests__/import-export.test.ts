@@ -1,16 +1,19 @@
 import { ImportExportManager } from '../src/import-export';
 import { SQLiteManager } from '../src/sqlite-manager';
-import { writeFileSync, existsSync, unlinkSync } from 'fs';
+import { writeFileSync, existsSync, unlinkSync, rmdirSync } from 'fs';
+import { join } from 'path';
 
 describe('ImportExportManager', () => {
   let sqliteManager: SQLiteManager;
   let importExportManager: ImportExportManager;
-  const testDbPath = './test-databases';
+  let testDbPath: string;
 
   beforeEach(async () => {
+    // Use unique test directory for each test to avoid conflicts
+    testDbPath = `./test-databases-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     sqliteManager = new SQLiteManager(testDbPath);
     importExportManager = new ImportExportManager(sqliteManager);
-    
+
     await sqliteManager.createDatabase('test_db');
     const schema = {
       columns: [
@@ -31,6 +34,21 @@ describe('ImportExportManager', () => {
       if (existsSync(file)) {
         unlinkSync(file);
       }
+    }
+    // Clean up test database directory
+    try {
+      if (existsSync(testDbPath)) {
+        const fs = require('fs');
+        const files = fs.readdirSync(testDbPath);
+        for (const file of files) {
+          if (file.endsWith('.db')) {
+            unlinkSync(join(testDbPath, file));
+          }
+        }
+        rmdirSync(testDbPath);
+      }
+    } catch (error) {
+      // Ignore cleanup errors
     }
   });
 
@@ -60,6 +78,17 @@ describe('ImportExportManager', () => {
     });
 
     test('should import CSV without header', async () => {
+      // Create table with generated column names
+      const schema = {
+        columns: [
+          { name: 'column_1', type: 'TEXT' },
+          { name: 'column_2', type: 'TEXT' },
+          { name: 'column_3', type: 'TEXT' },
+          { name: 'column_4', type: 'TEXT' }
+        ]
+      };
+      await sqliteManager.createTable('test_db', 'csv_test', schema);
+
       const csvContent = `1,John Doe,john@example.com,30
 2,Jane Smith,jane@example.com,25`;
 
@@ -67,7 +96,7 @@ describe('ImportExportManager', () => {
 
       const result = await importExportManager.importFromFile(
         'test_db',
-        'users',
+        'csv_test',
         './test.csv',
         'csv',
         { hasHeader: false }
@@ -75,6 +104,11 @@ describe('ImportExportManager', () => {
 
       expect(result.success).toBe(true);
       expect(result.data.importedCount).toBe(2);
+
+      // Verify data was inserted
+      const queryResult = await sqliteManager.queryData('test_db', 'csv_test');
+      expect(queryResult.data.rows).toHaveLength(2);
+      expect(queryResult.data.rows[0].column_2).toBe('John Doe');
     });
 
     test('should import CSV with custom delimiter', async () => {

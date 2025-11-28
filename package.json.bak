@@ -6,13 +6,13 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
-    "build:prod": "mkdir -p .tmp && cp package.prod.json .tmp/package.json && cd .tmp && npm install --production && cd .. && npx esbuild src/index.ts --bundle --minify --platform=node --target=node18 --outfile=dist/index.js --external:@modelcontextprotocol/sdk --external:sqlite3 --external:zod && rm -rf .tmp",
+    "build:prod": "cp package.json package.json.bak && cp package.prod.json package.json && npm ci --only=production && esbuild src/index.ts --bundle --minify --platform=node --target=node18 --outfile=dist/index.js --external:@modelcontextprotocol/sdk --external:sqlite3 --external:zod && mv package.json.bak package.json",
     "dev": "tsc --watch",
     "start": "node dist/index.js",
-    "test": "NODE_OPTIONS=--experimental-vm-modules jest",
+    "test": "jest",
     "test:watch": "jest --watch",
     "test:ci": "jest --coverage --maxWorkers=2",
-    "clean": "rm -rf dist coverage .tmp",
+    "clean": "rm -rf dist coverage",
     "lint": "eslint src/**/*.ts",
     "lint:fix": "eslint src/**/*.ts --fix",
     "docker:build": "docker build -t project-guardian-mcp .",
@@ -39,13 +39,12 @@
   },
   "devDependencies": {
     "@types/jest": "^29.5.8",
-    "@types/node": "^20.19.25",
-    "@typescript-eslint/eslint-plugin": "^6.12.0",
-    "@typescript-eslint/parser": "^6.12.0",
+    "@types/node": "^20.9.0",
+    "esbuild": "^0.19.0",
     "eslint": "^8.54.0",
+    "eslint-plugin-simple-import-sort": "^12.0.0",
     "jest": "^29.7.0",
     "ts-jest": "^29.1.1",
-    "tslib": "^2.8.1",
     "typescript": "^5.2.2"
   },
   "engines": {
