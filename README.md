@@ -623,8 +623,6 @@ project-guardian-mcp-server/
 ├── package.prod.json         # Production-only dependencies for smaller bundle
 ├── tsconfig.json            # TypeScript configuration
 ├── jest.config.js           # Test configuration
-├── Dockerfile               # Multi-stage production container
-├── .dockerignore           # Docker build optimization
 └── README.md                # This documentation
 ```
 

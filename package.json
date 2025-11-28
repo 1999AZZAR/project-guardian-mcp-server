@@ -15,8 +15,6 @@
     "clean": "rm -rf dist coverage .tmp",
     "lint": "eslint src/**/*.ts",
     "lint:fix": "eslint src/**/*.ts --fix",
-    "docker:build": "docker build -t project-guardian-mcp .",
-    "docker:run": "docker run --rm project-guardian-mcp",
     "prepublishOnly": "npm run clean && npm run build:prod"
   },
   "keywords": [
