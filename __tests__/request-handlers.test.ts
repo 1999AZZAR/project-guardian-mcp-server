@@ -18,7 +18,7 @@ describe('RequestHandlers', () => {
     sqliteManager = new SQLiteManager(testDbPath);
     importExportManager = new ImportExportManager(sqliteManager);
     memoryManager = new MemoryManager(sqliteManager);
-    requestHandlers = new RequestHandlers(sqliteManager, importExportManager, memoryManager, null as any);
+    requestHandlers = new RequestHandlers(sqliteManager, memoryManager, importExportManager);
 
     await memoryManager.initializeMemoryDatabase();
     await sqliteManager.createDatabase('test_db');
