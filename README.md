@@ -2,6 +2,34 @@
 
 A focused Model Context Protocol (MCP) server designed as your project's memory system and workflow guardian. This server provides streamlined database operations and advanced knowledge graph capabilities for intelligent project management, with exactly 17 tools, 10 resources, and 27 prompts to maintain clarity and focus.
 
+## Table of Contents
+
+- [Features](#features)
+  - [Project Guardian Memory System](#project-guardian-memory-system)
+  - [Streamlined Database Operations](#streamlined-database-operations)
+  - [AI Guidance System](#ai-guidance-system)
+  - [Advanced Features](#advanced-features)
+  - [Enterprise Features](#enterprise-features)
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Available Tools](#available-tools)
+  - [Database Operations (7 tools)](#database-operations-7-tools)
+  - [Project Guardian Memory Tools (10 tools)](#project-guardian-memory-tools-10-tools)
+- [AI Guidance System](#ai-guidance-system)
+  - [Available Resources](#available-resources)
+  - [Available Prompts](#available-prompts)
+  - [How AI Models Use Guidance](#how-ai-models-use-guidance)
+- [Usage Examples](#usage-examples)
+  - [Project Guardian Setup](#project-guardian-setup)
+  - [Project Management Workflow](#project-management-workflow)
+  - [Database Operations](#database-operations)
+- [Configuration](#configuration)
+  - [For Cursor IDE](#for-cursor-ide)
+  - [For Claude Desktop](#for-claude-desktop)
+- [Project Structure](#project-structure)
+- [Development](#development)
+- [License](#license)
+
 ## Features
 
 ### Project Guardian Memory System
