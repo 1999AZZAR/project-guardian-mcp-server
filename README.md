@@ -1,6 +1,6 @@
 # Project Guardian MCP
 
-A focused Model Context Protocol (MCP) server designed as your project's memory system and workflow guardian. This server provides streamlined database operations and advanced knowledge graph capabilities for intelligent project management, with exactly 17 tools, 10 resources, and 27 prompts to maintain clarity and focus.
+A focused Model Context Protocol (MCP) server designed as your project's memory system and workflow guardian. This server provides streamlined database operations and advanced knowledge graph capabilities for intelligent project management, with exactly 17 tools, 10 resources, and 28 prompts to maintain clarity and focus.
 
 ## Table of Contents
 
@@ -276,7 +276,7 @@ Recent additions, updates, and modifications to the knowledge graph for audit an
 
 ### Available Prompts
 
-Project Guardian offers **27 specialized prompts** covering all aspects of comprehensive project management, from basic setup to advanced enterprise workflows:
+Project Guardian offers **28 specialized prompts** covering all aspects of comprehensive project management, from basic setup to advanced enterprise workflows:
 
 #### Core Project Management
 #### `project-setup` - Project Initialization
@@ -485,8 +485,18 @@ Innovation management framework with idea generation, experimentation, and succe
 3. **Planning**: Use appropriate prompts for complex workflows
 4. **Execution**: Follow structured guidance to use tools effectively
 5. **Verification**: Check results and iterate as needed
-
 This guidance system ensures AI models can provide expert-level project management assistance using the Project Guardian toolset.
+
+### Behavioral Protocol (System Rules)
+
+Every `prompts/get` response from this MCP server includes a shared **Behavioral Protocol** as a system message (implemented in `src/prompts/behavioral-protocol.ts`). This protocol enforces:
+
+- Minimal, production-ready, self-documenting code with a security-first approach.
+- No buzzwords, unnecessary emoji, or filler; direct, technically accurate answers.
+- Adaptive response depth based on the user's request (quick answers vs. complex breakdowns).
+- Consistent use of validated best practices for systems, programming, UI/UX, and design.
+
+Clients integrating this MCP server should treat the first system message as the governing rules for any downstream model that uses these prompts.
 
 ## Usage Examples
 
@@ -635,9 +645,10 @@ project-guardian-mcp-server/
 │   │   ├── resource-definitions.ts # Static resource metadata
 │   │   └── resource-handlers.ts   # Dynamic resource content generation
 │   └── prompts/
-│       ├── prompt-registry.ts    # Prompt definitions and handlers
-│       ├── prompt-definitions.ts # Static prompt metadata
-│       └── prompt-handlers.ts    # Dynamic prompt content generation
+│       ├── prompt-registry.ts       # Prompt definitions and handlers
+│       ├── prompt-definitions.ts    # Static prompt metadata
+│       ├── prompt-handlers.ts       # Dynamic prompt content generation
+│       └── behavioral-protocol.ts   # Shared Behavioral Protocol system prompt
 ├── __tests__/                # Comprehensive test suite
 │   ├── tool-registry.test.ts
 │   ├── resource-registry.test.ts
@@ -670,6 +681,7 @@ project-guardian-mcp-server/
   - `prompt-registry.ts`: Prompt listing and content serving
   - `prompt-definitions.ts`: Static prompt metadata
   - `prompt-handlers.ts`: Dynamic prompt generation with context
+  - `behavioral-protocol.ts`: Centralized Behavioral Protocol system message used by all prompts
 - **memory-manager.ts**: Knowledge graph operations for entities, relationships, and observations
 - **sqlite-manager.ts**: Database abstraction layer with connection pooling and schema management
 - **import-export.ts**: Data transfer utilities for CSV and JSON formats

@@ -19,6 +19,7 @@ import { ResourceHandlers } from './resources/resource-registry.js';
 import { projectGuardianPrompts } from './prompts/prompt-registry.js';
 import { PromptHandlers } from './prompts/prompt-registry.js';
 import { RequestHandlers } from './handlers/request-handlers.js';
+import { BEHAVIORAL_PROTOCOL_SYSTEM_MESSAGE } from './prompts/behavioral-protocol.js';
 
 export class DatabaseMCPServer {
   private server: Server;
@@ -153,24 +154,35 @@ export class DatabaseMCPServer {
         const content = await this.promptHandlers.handleGetPrompt(name, args);
         return {
           description: `Generated prompt for ${name}`,
-          messages: [{
-            role: 'user',
-            content: {
-              type: 'text',
-              text: content,
+          messages: [
+            {
+              role: 'system',
+              content: {
+                type: 'text',
+                text: BEHAVIORAL_PROTOCOL_SYSTEM_MESSAGE,
+              },
             },
-          }],
+            {
+              role: 'user',
+              content: {
+                type: 'text',
+                text: content,
+              },
+            },
+          ],
         };
       } catch (error) {
         return {
           description: `Error generating prompt for ${name}`,
-          messages: [{
-            role: 'user',
-            content: {
-              type: 'text',
-              text: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          messages: [
+            {
+              role: 'user',
+              content: {
+                type: 'text',
+                text: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+              },
             },
-          }],
+          ],
           isError: true,
         };
       }
