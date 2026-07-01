@@ -206,6 +206,7 @@ export class DatabaseMCPServer {
   }
 
   async run(): Promise<void> {
+    await this.initializeMemorySystem();
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
     console.error('Project Guardian MCP server running on stdio');
