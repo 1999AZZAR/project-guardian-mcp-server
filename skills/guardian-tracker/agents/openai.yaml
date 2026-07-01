@@ -1,0 +1,11 @@
+name: guardian-tracker
+version: 1.0.0
+description: Auto-tracking skill for Project-Guardian memory.db
+author: 1999AZZAR
+license: MIT
+tags:
+  - tracking
+  - automation
+  - git
+  - file-changes
+category: development

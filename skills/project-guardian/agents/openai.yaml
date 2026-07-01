@@ -1,0 +1,11 @@
+name: project-guardian
+version: 1.0.0
+description: Core project memory and knowledge graph skill
+author: 1999AZZAR
+license: MIT
+tags:
+  - project-management
+  - knowledge-graph
+  - memory
+  - tracking
+category: development

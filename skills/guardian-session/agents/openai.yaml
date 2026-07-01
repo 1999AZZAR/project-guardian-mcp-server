@@ -1,0 +1,11 @@
+name: guardian-session
+version: 1.0.0
+description: Session context loader for Project-Guardian memory.db
+author: 1999AZZAR
+license: MIT
+tags:
+  - session
+  - context
+  - memory
+  - continuity
+category: development
