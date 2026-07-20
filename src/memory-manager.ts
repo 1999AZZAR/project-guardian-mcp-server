@@ -31,8 +31,29 @@ export class MemoryManager {
       const preCommitConfigPath = path.join(targetRoot, '.pre-commit-config.yaml');
       
       if (!fs.existsSync(preCommitConfigPath)) {
-        const preCommitContent = `repos:
-  - repo: https://github.com/psf/black
+        // Detect project characteristics
+        const hasPython = fs.existsSync(path.join(targetRoot, 'requirements.txt')) || 
+                          fs.existsSync(path.join(targetRoot, 'pyproject.toml')) || 
+                          fs.existsSync(path.join(targetRoot, 'setup.py'));
+        const hasNode = fs.existsSync(path.join(targetRoot, 'package.json'));
+        const hasLilyErp = fs.existsSync(path.join(targetRoot, 'lily_erp'));
+
+        let repos = [];
+
+        // Universal hooks
+        repos.push(`  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+        args: [--maxkb=500]
+      - id: check-merge-conflict
+      - id: detect-private-key`);
+
+        if (hasPython) {
+          repos.push(`  - repo: https://github.com/psf/black
     rev: 24.4.2
     hooks:
       - id: black
@@ -57,28 +78,29 @@ export class MemoryManager {
     hooks:
       - id: bandit
         args: [-c, pyproject.toml]
-        exclude: ^tests/
+        exclude: ^tests/`);
+        }
 
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.6.0
+        if (hasNode) {
+          repos.push(`  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: v3.1.0
     hooks:
-      - id: trailing-whitespace
-      - id: end-of-file-fixer
-      - id: check-yaml
-      - id: check-added-large-files
-        args: [--maxkb=500]
-      - id: check-merge-conflict
-      - id: detect-private-key
+      - id: prettier
+        types_or: [javascript, jsx, ts, tsx, css, less, html, json, markdown]`);
+        }
 
-  - repo: local
+        if (hasLilyErp) {
+          repos.push(`  - repo: local
     hooks:
       - id: domain-import-check
         name: Block frappe imports in domain layer
         entry: python scripts/check_domain_imports.py
         language: system
         files: ^lily_erp/domain/
-        types: [python]
-`;
+        types: [python]`);
+        }
+
+        const preCommitContent = `repos:\n${repos.join('\\n\\n')}\n`;
         fs.writeFileSync(preCommitConfigPath, preCommitContent, 'utf8');
         await execAsync('pre-commit install', { cwd: targetRoot });
         console.log('Pre-commit hooks enforced at ' + targetRoot + ' successfully.');
