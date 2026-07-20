@@ -103,3 +103,6 @@ temp/
 # MCP server specific
 mcp-servers.json
 demo-servers/
+# Project Guardian
+memory.db
+memory.db-journal

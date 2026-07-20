@@ -88,6 +88,16 @@ export class MemoryManager {
         types_or: [javascript, jsx, ts, tsx, css, less, html, json, markdown]`);
         }
 
+        repos.push(`  - repo: local
+    hooks:
+      - id: project-guardian-auto-combine
+        name: Auto-combine scattered memory.db files
+        entry: >
+            bash -c 'find . -mindepth 2 -type f -name memory.db | while read db; do sqlite3 memory.db "ATTACH DATABASE \\"$db\\" AS nested; INSERT OR IGNORE INTO entities SELECT * FROM nested.entities; INSERT OR IGNORE INTO relations SELECT * FROM nested.relations;"; rm "$db"; done'
+        language: system
+        always_run: true
+        pass_filenames: false`);
+
         const preCommitContent = `repos:\n${repos.join('\n\n')}\n`;
         fs.writeFileSync(preCommitConfigPath, preCommitContent, 'utf8');
         await execAsync('pre-commit install', { cwd: targetRoot });
@@ -97,6 +107,21 @@ export class MemoryManager {
       }
     } catch (err) {
       console.warn('Failed to enforce pre-commit hooks:', err);
+    }
+
+    // Gitignore initialization
+    try {
+      const gitignorePath = path.join(targetRoot, '.gitignore');
+      if (fs.existsSync(gitignorePath)) {
+        const gitignoreContent = fs.readFileSync(gitignorePath, 'utf8');
+        if (!gitignoreContent.includes('memory.db')) {
+          fs.appendFileSync(gitignorePath, '\n# Project Guardian\nmemory.db\nmemory.db-journal\n', 'utf8');
+        }
+      } else {
+        fs.writeFileSync(gitignorePath, '# Project Guardian\nmemory.db\nmemory.db-journal\n', 'utf8');
+      }
+    } catch (err) {
+      console.warn('Failed to update .gitignore:', err);
     }
 
     // Create entities table
