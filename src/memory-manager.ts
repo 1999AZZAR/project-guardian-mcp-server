@@ -17,17 +17,17 @@ export class MemoryManager {
 
   async initializeMemoryDatabase(): Promise<void> {
     // Note: Database will be created automatically when first accessed
+    
+    let targetRoot = process.cwd();
+    try {
+      const { stdout } = await execAsync('git rev-parse --show-toplevel');
+      targetRoot = stdout.trim();
+    } catch (e) {
+      // Not a git repository, fallback to cwd
+    }
 
     // Pre-commit hook initialization
     try {
-      let targetRoot = process.cwd();
-      try {
-        const { stdout } = await execAsync('git rev-parse --show-toplevel');
-        targetRoot = stdout.trim();
-      } catch (e) {
-        // Not a git repository, fallback to cwd
-      }
-
       const preCommitConfigPath = path.join(targetRoot, '.pre-commit-config.yaml');
       
       if (!fs.existsSync(preCommitConfigPath)) {
@@ -147,6 +147,33 @@ export class MemoryManager {
     );
     if (!updatedIndexResult.success) {
       console.warn('Failed to create entity updated index:', updatedIndexResult.error);
+    }
+
+    // Check for and combine scattered memory.db files in subdirectories
+    try {
+      const rootDbPath = path.join(targetRoot, 'memory.db');
+      const { stdout: findOut } = await execAsync(`find "${targetRoot}" -mindepth 2 -type f -name memory.db`);
+      const scatteredDbs = findOut.trim().split('\n').filter(Boolean);
+      
+      for (const dbPath of scatteredDbs) {
+        if (dbPath === rootDbPath) continue;
+        
+        console.log(`Found scattered memory.db at ${dbPath}. Auto-combining...`);
+        try {
+          await this.sqliteManager.executeSql(this.memoryDbName, `ATTACH DATABASE '${dbPath}' AS nested`);
+          await this.sqliteManager.executeSql(this.memoryDbName, `INSERT OR IGNORE INTO entities SELECT * FROM nested.entities`);
+          await this.sqliteManager.executeSql(this.memoryDbName, `INSERT OR IGNORE INTO relations SELECT * FROM nested.relations`);
+          await this.sqliteManager.executeSql(this.memoryDbName, `DETACH DATABASE nested`);
+          
+          fs.unlinkSync(dbPath);
+          console.log(`Successfully merged and removed scattered database: ${dbPath}`);
+        } catch (mergeErr) {
+          console.error(`Failed to merge scattered database ${dbPath}:`, mergeErr);
+          try { await this.sqliteManager.executeSql(this.memoryDbName, `DETACH DATABASE nested`); } catch (e) {}
+        }
+      }
+    } catch (e) {
+      // Find command might fail on some platforms or no files found
     }
   }
 

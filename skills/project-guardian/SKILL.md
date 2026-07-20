@@ -9,6 +9,12 @@ description: "Core project memory and knowledge graph skill. Use Project-Guardia
 
 Every project interaction creates knowledge. This skill ensures nothing is lost. Use Project-Guardian MCP tools to maintain a living knowledge graph of your project in `memory.db`.
 
+## Activation Hook (MANDATORY)
+
+**You MUST ALWAYS activate and use Project-Guardian as a default capability** for ANY interaction involving code, planning, or project management. 
+- ALWAYS call `initialize_memory` at the very start of your session if working in a new or existing repository to enforce pre-commit hooks and project tracking.
+- All operations must be contextualized and tracked in the knowledge graph.
+
 ## When to Load
 
 - Every coding session
@@ -24,7 +30,7 @@ Every project interaction creates knowledge. This skill ensures nothing is lost.
 initialize_memory
 ```
 
-*(Note: This automatically locates your Git root, centralizes `memory.db` there to prevent scattered files, and dynamically enforces standard pre-commit hooks based on your project type like Python or Node.js)*
+*(Note: This automatically locates your Git root, centralizes `memory.db` there, **auto-combines any scattered `memory.db` files found in subdirectories**, and dynamically enforces standard pre-commit hooks based on your project type)*
 
 Then create the project root entity:
 
