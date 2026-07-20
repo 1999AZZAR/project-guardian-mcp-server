@@ -38,7 +38,8 @@ A focused Model Context Protocol (MCP) server designed as your project's memory 
 - **Relationship Mapping**: Dependencies, ownership, blockers, and connections
 - **Observation Tracking**: Contextual notes and progress updates
 - **Semantic Search**: Full-text search across all project knowledge
-- **Memory Persistence**: Automatic persistence in SQLite database
+- **Centralized Persistence**: Automatically locates the Git root to ensure a single, unified `memory.db` across all nested directories
+- **Smart Pre-Commit Hooks**: Dynamically detects project type (Python, Node.js, etc.) and enforces global pre-commit policies on initialization
 
 ### Streamlined Database Operations
 - **Single Database**: Uses only `memory.db` for all operations

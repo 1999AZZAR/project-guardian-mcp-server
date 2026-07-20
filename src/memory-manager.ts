@@ -88,7 +88,7 @@ export class MemoryManager {
         types_or: [javascript, jsx, ts, tsx, css, less, html, json, markdown]`);
         }
 
-        const preCommitContent = `repos:\n${repos.join('\\n\\n')}\n`;
+        const preCommitContent = `repos:\n${repos.join('\n\n')}\n`;
         fs.writeFileSync(preCommitConfigPath, preCommitContent, 'utf8');
         await execAsync('pre-commit install', { cwd: targetRoot });
         console.log('Pre-commit hooks enforced at ' + targetRoot + ' successfully.');

@@ -24,6 +24,8 @@ Every project interaction creates knowledge. This skill ensures nothing is lost.
 initialize_memory
 ```
 
+*(Note: This automatically locates your Git root, centralizes `memory.db` there to prevent scattered files, and dynamically enforces standard pre-commit hooks based on your project type like Python or Node.js)*
+
 Then create the project root entity:
 
 ```
