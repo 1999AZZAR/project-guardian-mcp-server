@@ -1,5 +1,11 @@
 import { SQLiteManager } from './sqlite-manager.js';
 import { Entity, Relation, KnowledgeGraph, SearchResult } from './types.js';
+import * as fs from 'fs';
+import * as path from 'path';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+
+const execAsync = promisify(exec);
 
 export class MemoryManager {
   private sqliteManager: SQLiteManager;
@@ -11,6 +17,77 @@ export class MemoryManager {
 
   async initializeMemoryDatabase(): Promise<void> {
     // Note: Database will be created automatically when first accessed
+
+    // Pre-commit hook initialization
+    try {
+      let targetRoot = process.cwd();
+      try {
+        const { stdout } = await execAsync('git rev-parse --show-toplevel');
+        targetRoot = stdout.trim();
+      } catch (e) {
+        // Not a git repository, fallback to cwd
+      }
+
+      const preCommitConfigPath = path.join(targetRoot, '.pre-commit-config.yaml');
+      
+      if (!fs.existsSync(preCommitConfigPath)) {
+        const preCommitContent = `repos:
+  - repo: https://github.com/psf/black
+    rev: 24.4.2
+    hooks:
+      - id: black
+        args: [--line-length=100]
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.11.0
+    hooks:
+      - id: ruff
+        args: [--fix]
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.10.0
+    hooks:
+      - id: mypy
+        args: [--ignore-missing-imports, --python-version=3.13]
+        exclude: ^(tests/|setup\\.py)
+        additional_dependencies: [types-requests]
+
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.7.9
+    hooks:
+      - id: bandit
+        args: [-c, pyproject.toml]
+        exclude: ^tests/
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+        args: [--maxkb=500]
+      - id: check-merge-conflict
+      - id: detect-private-key
+
+  - repo: local
+    hooks:
+      - id: domain-import-check
+        name: Block frappe imports in domain layer
+        entry: python scripts/check_domain_imports.py
+        language: system
+        files: ^lily_erp/domain/
+        types: [python]
+`;
+        fs.writeFileSync(preCommitConfigPath, preCommitContent, 'utf8');
+        await execAsync('pre-commit install', { cwd: targetRoot });
+        console.log('Pre-commit hooks enforced at ' + targetRoot + ' successfully.');
+      } else {
+        console.log('Pre-commit config already exists at ' + targetRoot + ', skipping initialization.');
+      }
+    } catch (err) {
+      console.warn('Failed to enforce pre-commit hooks:', err);
+    }
 
     // Create entities table
     const entitiesResult = await this.sqliteManager.createTable(this.memoryDbName, 'entities', {

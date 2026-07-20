@@ -11,6 +11,7 @@ import {
 import { SQLiteManager } from './sqlite-manager.js';
 import { ImportExportManager } from './import-export.js';
 import { MemoryManager } from './memory-manager.js';
+import { execSync } from 'child_process';
 
 // Modular imports
 import { allTools } from './tools/tool-registry.js';
@@ -31,8 +32,16 @@ export class DatabaseMCPServer {
   private requestHandlers: RequestHandlers;
 
   constructor() {
+    // Determine the git root or fallback to cwd for the database
+    let dbPath = '.';
+    try {
+      dbPath = execSync('git rev-parse --show-toplevel', { encoding: 'utf-8' }).trim();
+    } catch (e) {
+      // Not a git repository, fallback to '.'
+    }
+
     // Use only memory.db for all operations
-    this.sqliteManager = new SQLiteManager('.');
+    this.sqliteManager = new SQLiteManager(dbPath);
     this.importExportManager = new ImportExportManager(this.sqliteManager);
     this.memoryManager = new MemoryManager(this.sqliteManager);
 
