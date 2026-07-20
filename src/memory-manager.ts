@@ -101,12 +101,12 @@ export class MemoryManager {
         const preCommitContent = `repos:\n${repos.join('\n\n')}\n`;
         fs.writeFileSync(preCommitConfigPath, preCommitContent, 'utf8');
         await execAsync('pre-commit install', { cwd: targetRoot });
-        console.log('Pre-commit hooks enforced at ' + targetRoot + ' successfully.');
+         // console.error('Pre-commit hooks enforced at ' + targetRoot + ' successfully.');
       } else {
-        console.log('Pre-commit config already exists at ' + targetRoot + ', skipping initialization.');
+         // console.error('Pre-commit config already exists at ' + targetRoot + ', skipping initialization.');
       }
     } catch (err) {
-      console.warn('Failed to enforce pre-commit hooks:', err);
+       // console.warn('Failed to enforce pre-commit hooks:', err);
     }
 
     // Gitignore initialization
@@ -121,7 +121,7 @@ export class MemoryManager {
         fs.writeFileSync(gitignorePath, '# Project Guardian\nmemory.db\nmemory.db-journal\n', 'utf8');
       }
     } catch (err) {
-      console.warn('Failed to update .gitignore:', err);
+       // console.warn('Failed to update .gitignore:', err);
     }
 
     // Create entities table
@@ -164,14 +164,14 @@ export class MemoryManager {
       'CREATE INDEX IF NOT EXISTS idx_entities_type ON entities(entity_type)'
     );
     if (!typeIndexResult.success) {
-      console.warn('Failed to create entity type index:', typeIndexResult.error);
+       // console.warn('Failed to create entity type index:', typeIndexResult.error);
     }
 
     const updatedIndexResult = await this.sqliteManager.executeSql(this.memoryDbName,
       'CREATE INDEX IF NOT EXISTS idx_entities_updated ON entities(updated_at)'
     );
     if (!updatedIndexResult.success) {
-      console.warn('Failed to create entity updated index:', updatedIndexResult.error);
+       // console.warn('Failed to create entity updated index:', updatedIndexResult.error);
     }
 
     // Check for and combine scattered memory.db files in subdirectories
@@ -183,7 +183,7 @@ export class MemoryManager {
       for (const dbPath of scatteredDbs) {
         if (dbPath === rootDbPath) continue;
         
-        console.log(`Found scattered memory.db at ${dbPath}. Auto-combining...`);
+         // console.error(`Found scattered memory.db at ${dbPath}. Auto-combining...`);
         try {
           await this.sqliteManager.executeSql(this.memoryDbName, `ATTACH DATABASE '${dbPath}' AS nested`);
           await this.sqliteManager.executeSql(this.memoryDbName, `INSERT OR IGNORE INTO entities SELECT * FROM nested.entities`);
@@ -191,9 +191,9 @@ export class MemoryManager {
           await this.sqliteManager.executeSql(this.memoryDbName, `DETACH DATABASE nested`);
           
           fs.unlinkSync(dbPath);
-          console.log(`Successfully merged and removed scattered database: ${dbPath}`);
+           // console.error(`Successfully merged and removed scattered database: ${dbPath}`);
         } catch (mergeErr) {
-          console.error(`Failed to merge scattered database ${dbPath}:`, mergeErr);
+           // console.error(`Failed to merge scattered database ${dbPath}:`, mergeErr);
           try { await this.sqliteManager.executeSql(this.memoryDbName, `DETACH DATABASE nested`); } catch (e) {}
         }
       }
@@ -243,7 +243,7 @@ export class MemoryManager {
         results.push(created);
       } catch (error) {
         // Continue with other entities if one fails
-        console.error(`Failed to create entity ${entity.name}:`, error);
+         // console.error(`Failed to create entity ${entity.name}:`, error);
       }
     }
 
@@ -291,7 +291,7 @@ export class MemoryManager {
         const created = await this.createRelation(relation.from, relation.to, relation.relationType);
         results.push(created);
       } catch (error) {
-        console.error(`Failed to create relation ${relation.from} -> ${relation.to}:`, error);
+         // console.error(`Failed to create relation ${relation.from} -> ${relation.to}:`, error);
       }
     }
 
@@ -337,7 +337,7 @@ export class MemoryManager {
         const updated = await this.addObservation(obs.entityName, obs.contents);
         results.push(updated);
       } catch (error) {
-        console.error(`Failed to add observations to entity ${obs.entityName}:`, error);
+         // console.error(`Failed to add observations to entity ${obs.entityName}:`, error);
       }
     }
 
@@ -401,7 +401,7 @@ export class MemoryManager {
         const updated = await this.deleteObservation(deletion.entityName, deletion.observations);
         results.push(updated);
       } catch (error) {
-        console.error(`Failed to delete observations from entity ${deletion.entityName}:`, error);
+         // console.error(`Failed to delete observations from entity ${deletion.entityName}:`, error);
       }
     }
 

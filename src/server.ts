@@ -141,9 +141,9 @@ export class DatabaseMCPServer {
   private async initializeMemorySystem(): Promise<void> {
     try {
       await this.memoryManager.initializeMemoryDatabase();
-      console.error('Memory system initialized successfully');
+       // console.error('Memory system initialized successfully');
     } catch (error) {
-      console.error('Failed to initialize memory system:', error);
+       // console.error('Failed to initialize memory system:', error);
     }
   }
 
@@ -200,7 +200,7 @@ export class DatabaseMCPServer {
 
   private setupErrorHandling(): void {
     this.server.onerror = (error) => {
-      console.error('[MCP Error]', error);
+       // console.error('[MCP Error]', error);
     };
 
     process.on('SIGINT', async () => {
@@ -218,6 +218,6 @@ export class DatabaseMCPServer {
     await this.initializeMemorySystem();
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
-    console.error('Project Guardian MCP server running on stdio');
+     // console.error('Project Guardian MCP server running on stdio');
   }
 }
