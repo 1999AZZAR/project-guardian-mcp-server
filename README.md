@@ -1,6 +1,6 @@
 # Project Guardian MCP
 
-A focused Model Context Protocol (MCP) server designed as your project's memory system and workflow guardian. This server provides streamlined database operations and advanced knowledge graph capabilities for intelligent project management, with exactly 17 tools, 10 resources, and 28 prompts to maintain clarity and focus.
+A focused Model Context Protocol (MCP) server designed as your project's memory system and workflow guardian. This server provides streamlined database operations and advanced knowledge graph capabilities for intelligent project management, with exactly 18 tools, 10 resources, and 28 prompts to maintain clarity and focus.
 
 ## Table of Contents
 
@@ -14,7 +14,7 @@ A focused Model Context Protocol (MCP) server designed as your project's memory 
 - [Installation](#installation)
 - [Available Tools](#available-tools)
   - [Database Operations (7 tools)](#database-operations-7-tools)
-  - [Project Guardian Memory Tools (10 tools)](#project-guardian-memory-tools-10-tools)
+  - [Project Guardian Memory Tools (11 tools)](#project-guardian-memory-tools-11-tools)
 - [AI Guidance System](#ai-guidance-system)
   - [Available Resources](#available-resources)
   - [Available Prompts](#available-prompts)
@@ -46,7 +46,7 @@ A focused Model Context Protocol (MCP) server designed as your project's memory 
 - **Core CRUD**: Essential database operations (query, insert, update, delete)
 - **SQL Execution**: Direct SQL query execution
 - **Data Transfer**: Import/export CSV and JSON files
-- **17 Tools Total**: Focused toolset for maximum clarity
+- **18 Tools Total**: Focused toolset for maximum clarity
 
 ### AI Guidance System
 - **10 Resources**: Templates, best practices, cached data, and comprehensive project status
@@ -101,7 +101,7 @@ npm start
 
 ## Available Tools
 
-This MCP server provides **exactly 17 focused tools** for project guardianship:
+This MCP server provides **exactly 18 focused tools** for project guardianship:
 
 ### Database Operations (7 tools)
 
@@ -164,7 +164,7 @@ Export memory.db table data to CSV or JSON file.
 - `conditions` (optional): WHERE conditions to filter export
 - `options` (optional): Export options (delimiter, includeHeader)
 
-### Project Guardian Memory Tools (10 tools)
+### Project Guardian Memory Tools (11 tools)
 
 #### `initialize_memory` - Initialize Memory System
 Set up the project memory database schema and tables.
@@ -236,6 +236,13 @@ Retrieve detailed information about project entities (supports single or batch).
 
 **Parameters:**
 - `names` (required): Array of entity names to retrieve
+
+#### `get_project_guidance` - Access AI Guidance
+Invoke a project guidance framework to receive specialized instructions and checklists for specific workflows. This allows the AI to autonomously fetch and follow established project management protocols.
+
+**Parameters:**
+- `guidance_name` (required): Name of the guidance (e.g., project-setup, sprint-planning)
+- `arguments` (optional): Arguments required by the specific guidance framework
 
 ## AI Guidance System
 
@@ -670,10 +677,11 @@ project-guardian-mcp-server/
 
 - **server.ts**: Clean orchestrator (161 lines) coordinating modular components
 - **handlers/request-handlers.ts**: Central dispatcher routing tool calls to appropriate managers
-- **tools/**: Tool definition and registration system (17 tools total)
+- **tools/**: Tool definition and registration system (18 tools total)
   - `tool-registry.ts`: Lists all available tools
   - `database-tools.ts`: Database operation schemas (7 tools)
   - `memory-tools.ts`: Memory management schemas (10 tools)
+  - `guidance-tools.ts`: Autonomous guidance tool schema (1 tool)
 - **resources/**: Resource management system (11 resources total)
   - `resource-registry.ts`: Resource listing and content serving
   - `resource-definitions.ts`: Static resource metadata
