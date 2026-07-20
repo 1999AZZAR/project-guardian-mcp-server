@@ -36,7 +36,6 @@ export class MemoryManager {
                           fs.existsSync(path.join(targetRoot, 'pyproject.toml')) || 
                           fs.existsSync(path.join(targetRoot, 'setup.py'));
         const hasNode = fs.existsSync(path.join(targetRoot, 'package.json'));
-        const hasLilyErp = fs.existsSync(path.join(targetRoot, 'lily_erp'));
 
         let repos = [];
 
@@ -87,17 +86,6 @@ export class MemoryManager {
     hooks:
       - id: prettier
         types_or: [javascript, jsx, ts, tsx, css, less, html, json, markdown]`);
-        }
-
-        if (hasLilyErp) {
-          repos.push(`  - repo: local
-    hooks:
-      - id: domain-import-check
-        name: Block frappe imports in domain layer
-        entry: python scripts/check_domain_imports.py
-        language: system
-        files: ^lily_erp/domain/
-        types: [python]`);
         }
 
         const preCommitContent = `repos:\n${repos.join('\\n\\n')}\n`;
