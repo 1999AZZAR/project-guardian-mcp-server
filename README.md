@@ -106,6 +106,14 @@ npm run build:prod
 npm start
 ```
 
+### Updating After Changes
+
+When you pull new updates or modify the code, you must rebuild the server and restart your MCP client (Cursor, Claude Desktop, etc.) for the changes to take effect:
+
+1. Pull the latest code: `git pull`
+2. Install new dependencies (if any): `npm install`
+3. Rebuild the bundle: `npm run build:prod`
+4. **Important**: Restart your IDE or the MCP connection so the client can fetch the newly updated tools and prompts.
 
 ## Available Tools
 
