@@ -386,7 +386,7 @@ export class SQLiteManager {
       let sql = `SELECT * FROM ${tableName}`;
       const params: any[] = [];
       
-      if (conditions) {
+      if (conditions && Object.keys(conditions).length > 0) {
         const whereClause = Object.keys(conditions).map(key => `${key} = ?`).join(' AND ');
         sql += ` WHERE ${whereClause}`;
         params.push(...Object.values(conditions));
