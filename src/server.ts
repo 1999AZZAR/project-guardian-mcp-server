@@ -48,7 +48,12 @@ export class DatabaseMCPServer {
     // Initialize modular handlers
     this.resourceHandlers = new ResourceHandlers(this.memoryManager, this.sqliteManager);
     this.promptHandlers = new PromptHandlers();
-    this.requestHandlers = new RequestHandlers(this.sqliteManager, this.memoryManager, this.importExportManager);
+    this.requestHandlers = new RequestHandlers(
+      this.sqliteManager, 
+      this.memoryManager, 
+      this.importExportManager,
+      this.promptHandlers
+    );
 
     this.server = new Server(
       {

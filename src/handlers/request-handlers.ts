@@ -2,12 +2,14 @@ import { CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { SQLiteManager } from '../sqlite-manager.js';
 import { MemoryManager } from '../memory-manager.js';
 import { ImportExportManager } from '../import-export.js';
+import { PromptHandlers } from '../prompts/prompt-handlers.js';
 
 export class RequestHandlers {
   constructor(
     private sqliteManager: SQLiteManager,
     private memoryManager: MemoryManager,
-    private importExportManager: ImportExportManager
+    private importExportManager: ImportExportManager,
+    private promptHandlers: PromptHandlers
   ) {}
 
   async handleToolCall(name: string, args: any): Promise<any> {
@@ -20,6 +22,18 @@ export class RequestHandlers {
       // Memory operations
       if (['initialize_memory', 'create_entity', 'create_relation', 'add_observation', 'delete_entity', 'delete_observation', 'delete_relation', 'read_graph', 'search_nodes', 'open_node'].includes(name)) {
         return await this.handleMemoryTool(name, args);
+      }
+      // Guidance operations
+      if (name === 'get_project_guidance') {
+        const guidanceContent = await this.promptHandlers.handleGetPrompt(args.guidance_name, args.arguments || {});
+        return {
+          success: true,
+          data: {
+            guidance_name: args.guidance_name,
+            instructions: guidanceContent
+          },
+          message: `Successfully loaded guidance for ${args.guidance_name}`
+        };
       }
 
       throw new Error(`Unknown tool: ${name}`);
