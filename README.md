@@ -89,8 +89,16 @@ npm install
 ```
 
 3. **Build the project:**
+Choose between development or production build:
+
+For development (includes source maps and full TypeScript compilation):
 ```bash
 npm run build
+```
+
+For production (creates an optimized, minified bundle):
+```bash
+npm run build:prod
 ```
 
 4. **Test the server:**
@@ -710,8 +718,19 @@ npm install
 ```
 
 3. **Build the project:**
+For active development (with file watching):
+```bash
+npm run dev
+```
+
+For a standard build:
 ```bash
 npm run build
+```
+
+For a production-optimized build:
+```bash
+npm run build:prod
 ```
 
 4. **Test the server:**
