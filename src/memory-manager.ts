@@ -2,10 +2,11 @@ import { SQLiteManager } from './sqlite-manager.js';
 import { Entity, Relation, KnowledgeGraph, SearchResult } from './types.js';
 import * as fs from 'fs';
 import * as path from 'path';
-import { exec } from 'child_process';
+import { exec, execFile } from 'child_process';
 import { promisify } from 'util';
 
 const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 export class MemoryManager {
   private sqliteManager: SQLiteManager;
@@ -108,13 +109,13 @@ export class MemoryManager {
 
         const preCommitContent = `repos:\n${repos.join('\n\n')}\n`;
         fs.writeFileSync(preCommitConfigPath, preCommitContent, 'utf8');
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('pre-commit install timed out')), 30000)
-        );
-        await Promise.race([
-          execAsync('pre-commit install', { cwd: targetRoot }),
-          timeoutPromise
-        ]);
+        const ac = new AbortController();
+        const timeoutId = setTimeout(() => ac.abort(), 30000);
+        try {
+          await execFileAsync('pre-commit', ['install'], { cwd: targetRoot, signal: ac.signal });
+        } finally {
+          clearTimeout(timeoutId);
+        }
       }
     } catch (err) {
       console.warn('Failed to enforce pre-commit hooks:', err);
@@ -189,14 +190,15 @@ export class MemoryManager {
     if (targetRoot !== (process.env.HOME || '')) {
       try {
         const rootDbPath = path.join(targetRoot, 'memory.db');
-        const { stdout: findOut } = await execAsync(`find "${targetRoot}" -mindepth 2 -type f -name memory.db`);
+        const { stdout: findOut } = await execFileAsync('find', [targetRoot, '-mindepth', '2', '-type', 'f', '-name', 'memory.db']);
         const scatteredDbs = findOut.trim().split('\n').filter(Boolean);
         
         for (const dbPath of scatteredDbs) {
           if (dbPath === rootDbPath) continue;
           
           try {
-            await this.sqliteManager.executeSql(this.memoryDbName, `ATTACH DATABASE '${dbPath}' AS nested`);
+            const escapedPath = dbPath.replace(/'/g, "''");
+            await this.sqliteManager.executeSql(this.memoryDbName, `ATTACH DATABASE '${escapedPath}' AS nested`);
             await this.sqliteManager.executeSql(this.memoryDbName, `INSERT OR IGNORE INTO entities SELECT * FROM nested.entities`);
             await this.sqliteManager.executeSql(this.memoryDbName, `INSERT OR IGNORE INTO relations SELECT * FROM nested.relations`);
             await this.sqliteManager.executeSql(this.memoryDbName, `DETACH DATABASE nested`);

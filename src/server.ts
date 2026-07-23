@@ -37,7 +37,7 @@ export class DatabaseMCPServer {
     // Determine the git root or fallback to cwd for the database
     let dbPath: string;
     try {
-      const output = execSync('git rev-parse --show-toplevel 2>/dev/null', { encoding: 'utf-8' }).trim();
+      const output = execSync('git rev-parse --show-toplevel 2>/dev/null', { encoding: 'utf-8', timeout: 5000 }).trim();
       if (!output) throw new Error();
       dbPath = output;
     } catch {
@@ -217,7 +217,10 @@ export class DatabaseMCPServer {
     DatabaseMCPServer.shutdownHandlersRegistered = true;
 
     const shutdown = async () => {
-      await this.sqliteManager.closeAllConnections();
+      await Promise.race([
+        this.sqliteManager.closeAllConnections(),
+        new Promise(resolve => setTimeout(resolve, 5000))
+      ]);
       process.exit(0);
     };
 
