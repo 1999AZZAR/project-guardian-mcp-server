@@ -2,6 +2,8 @@
 
 A Model Context Protocol (MCP) server for persistent project memory, knowledge-graph operations, SQLite data access, and guided project-management workflows. The current registry exposes 18 tools, 10 resources, and 27 prompts.
 
+![Blotcat — guardian on duty, wiring the knowledge graph from memory.db](assets/blotcat-hero.jpg)
+
 ## Table of Contents
 
 - [Features](#features)
@@ -528,6 +530,8 @@ Every `prompts/get` response from this MCP server includes a shared **Behavioral
 Clients integrating this MCP server should treat the first system message as the governing rules for any downstream model that uses these prompts.
 
 ## Usage Examples
+
+![Blotcat routing Prompt → Tools → memory.db, 18 tools in hand](assets/blotcat-workflow.jpg)
 
 ### Project Guardian Setup
 
