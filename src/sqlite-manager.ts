@@ -15,6 +15,7 @@ export class SQLiteManager {
   private connections: Map<string, sqlite3.Database> = new Map();
   private databasesPath: string;
   private defaultDatabaseName: string = 'memory';
+  private readonly MAX_CONNECTIONS = 20;
 
   constructor(databasesPath: string = './databases') {
     this.databasesPath = databasesPath;
@@ -47,12 +48,21 @@ export class SQLiteManager {
   }
 
   private async getConnection(name: string): Promise<sqlite3.Database> {
-    if (!this.connections.has(name)) {
-      const dbPath = this.getDatabasePath(name);
-      const db = new sqlite3.Database(dbPath);
-      this.connections.set(name, db);
+    if (this.connections.has(name)) {
+      return this.connections.get(name)!;
     }
-    return this.connections.get(name)!;
+    if (this.connections.size >= this.MAX_CONNECTIONS) {
+      for (const [key] of this.connections) {
+        if (key !== this.defaultDatabaseName) {
+          await this.closeConnection(key);
+          break;
+        }
+      }
+    }
+    const dbPath = this.getDatabasePath(name);
+    const db = new sqlite3.Database(dbPath);
+    this.connections.set(name, db);
+    return db;
   }
 
   async createDatabase(name: string): Promise<DatabaseOperationResult> {
@@ -628,6 +638,10 @@ export class SQLiteManager {
 
   // Helper methods
   private async query(db: sqlite3.Database, sql: string, params: any[] = []): Promise<QueryResult> {
+    const trimmed = sql.trim().toUpperCase();
+    if (trimmed.startsWith('SELECT') && !trimmed.includes('LIMIT')) {
+      sql += ' LIMIT 10000';
+    }
     return new Promise((resolve, reject) => {
       const startTime = Date.now();
       
