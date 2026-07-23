@@ -97,7 +97,7 @@ Double SIGINT races `closeAllConnections`; if close hangs, process never exits.
 - **File:** `src/memory-manager.ts:126`
 - **Fix:** Use `AbortController` + `kill()` on timeout.
 
-## Sprint 2: Memory & Data Integrity — MEDIUM
+## Sprint 2: Memory & Data Integrity — FIXED
 
 ### [M4] Unbounded `find` output
 `execAsync` captures entire `find` stdout. A repo with 100k `.db` files fills RAM.
@@ -166,15 +166,15 @@ No guard against registering SIGINT/SIGTERM handlers twice.
 - [ ] V1 — ORDER BY sanitization
 - [ ] V2 — Zod validation in request handlers
 - [x] M3 — `execFile` instead of `execAsync` for find
-- [ ] M4 — Stream find output
+- [x] M4 — Stream find output
 - [x] M5 — Escape ATTACH filename
 - [x] M6 — execSync timeout
 - [x] M7 — Shutdown debounce + timeout
 - [x] M8 — AbortController for pre-commit
-- [ ] M9 — Try-catch JSON.parse on DB rows
-- [ ] M10 — `??` instead of `||` in CSV
-- [ ] M11 — Stream SQL import
-- [ ] M12 — Cap scattered DB merge
+- [x] M9 — Try-catch JSON.parse on DB rows
+- [x] M10 — `??` instead of `||` in CSV
+- [x] M11 — Stream SQL import
+- [x] M12 — Cap scattered DB merge
 - [x] L3 — deleteEntity transaction
 - [x] L4 — Dedup signal handlers
 - [x] L5 — Partial failure reporting
