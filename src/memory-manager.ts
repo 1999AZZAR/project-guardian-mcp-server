@@ -2,8 +2,9 @@ import { SQLiteManager } from './sqlite-manager.js';
 import { Entity, Relation, KnowledgeGraph, SearchResult } from './types.js';
 import * as fs from 'fs';
 import * as path from 'path';
-import { exec, execFile } from 'child_process';
+import { exec, execFile, spawn } from 'child_process';
 import { promisify } from 'util';
+import { createInterface } from 'readline';
 
 const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
@@ -188,13 +189,22 @@ export class MemoryManager {
 
     // Scattered DB consolidation — skip for home dir (too expensive)
     if (targetRoot !== (process.env.HOME || '')) {
+      const rootDbPath = path.join(targetRoot, 'memory.db');
+      let mergeCount = 0;
+      const MAX_MERGE = 100;
+
+      const findProcess = spawn('find', [targetRoot, '-mindepth', '2', '-type', 'f', '-name', 'memory.db']);
+      const rl = createInterface({ input: findProcess.stdout });
+
       try {
-        const rootDbPath = path.join(targetRoot, 'memory.db');
-        const { stdout: findOut } = await execFileAsync('find', [targetRoot, '-mindepth', '2', '-type', 'f', '-name', 'memory.db']);
-        const scatteredDbs = findOut.trim().split('\n').filter(Boolean);
-        
-        for (const dbPath of scatteredDbs) {
-          if (dbPath === rootDbPath) continue;
+        for await (const line of rl) {
+          if (mergeCount >= MAX_MERGE) {
+            console.warn(`Scattered DB merge capped at ${MAX_MERGE} files, skipping rest`);
+            findProcess.kill();
+            break;
+          }
+          const dbPath = line.trim();
+          if (!dbPath || dbPath === rootDbPath) continue;
           
           try {
             const escapedPath = dbPath.replace(/'/g, "''");
@@ -204,6 +214,7 @@ export class MemoryManager {
             await this.sqliteManager.executeSql(this.memoryDbName, `DETACH DATABASE nested`);
             
             fs.unlinkSync(dbPath);
+            mergeCount++;
           } catch (mergeErr) {
             console.error(`Failed to merge scattered database ${dbPath}:`, mergeErr);
             try { await this.sqliteManager.executeSql(this.memoryDbName, `DETACH DATABASE nested`); } catch (e) {}
@@ -318,7 +329,7 @@ export class MemoryManager {
     }
 
     const entity = result.data.rows[0];
-    const currentObservations = JSON.parse(entity.observations);
+    const currentObservations = this.safeParseObservations(entity.observations);
     const updatedObservations = [...currentObservations, ...contents];
     const now = new Date().toISOString();
 
@@ -386,7 +397,7 @@ export class MemoryManager {
     }
 
     const entity = result.data.rows[0];
-    const currentObservations = JSON.parse(entity.observations);
+    const currentObservations = this.safeParseObservations(entity.observations);
     const updatedObservations = currentObservations.filter((obs: string) => !observations.includes(obs));
     const now = new Date().toISOString();
 
@@ -445,7 +456,7 @@ export class MemoryManager {
       ? entitiesResult.data.rows.map((row: any) => ({
           name: row.name,
           entityType: row.entity_type,
-          observations: JSON.parse(row.observations),
+          observations: this.safeParseObservations(row.observations),
           createdAt: row.created_at,
           updatedAt: row.updated_at
         }))
@@ -480,7 +491,7 @@ export class MemoryManager {
       ? entitiesResult.data.rows.map((row: any) => ({
           name: row.name,
           entityType: row.entity_type,
-          observations: JSON.parse(row.observations),
+          observations: this.safeParseObservations(row.observations),
           createdAt: row.created_at,
           updatedAt: row.updated_at
         }))
@@ -516,10 +527,18 @@ export class MemoryManager {
     return {
       name: row.name,
       entityType: row.entity_type,
-      observations: JSON.parse(row.observations),
+      observations: this.safeParseObservations(row.observations),
       createdAt: row.created_at,
       updatedAt: row.updated_at
     };
+  }
+
+  private safeParseObservations(json: string): string[] {
+    try {
+      return JSON.parse(json);
+    } catch {
+      return [];
+    }
   }
 
   async openNodes(names: string[]): Promise<Entity[]> {

@@ -1,4 +1,5 @@
-import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, createReadStream } from 'fs';
+import { createInterface } from 'readline';
 import { SQLiteManager } from './sqlite-manager.js';
 import { DatabaseOperationResult } from './types.js';
 
@@ -219,26 +220,37 @@ export class ImportExportManager {
   }
 
   private async executeSQLFile(database: string, filePath: string): Promise<DatabaseOperationResult> {
-    const content = readFileSync(filePath, 'utf8');
-    
-    // Split by semicolon and execute each statement
-    const statements = content.split(';').filter(stmt => stmt.trim());
-    
+    const rl = createInterface({ input: createReadStream(filePath) });
+    let buffer = '';
     let executedCount = 0;
-    for (const statement of statements) {
-      const trimmed = statement.trim();
-      if (trimmed) {
-        const result = await this.sqliteManager.executeSql(database, trimmed);
-        if (result.success) {
+
+    for await (const line of rl) {
+      buffer += line + '\n';
+      const idx = buffer.indexOf(';');
+      while (idx !== -1) {
+        const stmt = buffer.slice(0, idx).trim();
+        buffer = buffer.slice(idx + 1);
+        if (stmt) {
+          const result = await this.sqliteManager.executeSql(database, stmt);
+          if (!result.success) {
+            rl.close();
+            return {
+              success: false,
+              message: `Failed to execute SQL statement: ${stmt.substring(0, 50)}...`,
+              error: result.error
+            };
+          }
           executedCount++;
-        } else {
-          return {
-            success: false,
-            message: `Failed to execute SQL statement: ${trimmed.substring(0, 50)}...`,
-            error: result.error
-          };
         }
+        const nextIdx = buffer.indexOf(';');
+        if (nextIdx === -1) break;
       }
+    }
+
+    const remaining = buffer.trim();
+    if (remaining) {
+      const result = await this.sqliteManager.executeSql(database, remaining);
+      if (result.success) executedCount++;
     }
 
     return {
@@ -265,7 +277,7 @@ export class ImportExportManager {
         if (typeof value === 'string' && (value.includes(delimiter) || value.includes('"'))) {
           return `"${value.replace(/"/g, '""')}"`;
         }
-        return value || '';
+        return value ?? '';
       });
       content += values.join(delimiter) + '\n';
     }
