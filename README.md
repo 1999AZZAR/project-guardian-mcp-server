@@ -1,6 +1,6 @@
 # Project Guardian MCP
 
-A focused Model Context Protocol (MCP) server designed as your project's memory system and workflow guardian. This server provides streamlined database operations and advanced knowledge graph capabilities for intelligent project management, with exactly 18 tools, 10 resources, and 28 prompts to maintain clarity and focus.
+A Model Context Protocol (MCP) server for persistent project memory, knowledge-graph operations, SQLite data access, and guided project-management workflows. The current registry exposes 18 tools, 10 resources, and 27 prompts.
 
 ## Table of Contents
 
@@ -14,7 +14,7 @@ A focused Model Context Protocol (MCP) server designed as your project's memory 
 - [Installation](#installation)
 - [Available Tools](#available-tools)
   - [Database Operations (7 tools)](#database-operations-7-tools)
-  - [Project Guardian Memory Tools (11 tools)](#project-guardian-memory-tools-11-tools)
+  - [Memory and Guidance Tools (11 tools)](#memory-and-guidance-tools-11-tools)
 - [AI Guidance System](#ai-guidance-system)
   - [Available Resources](#available-resources)
   - [Available Prompts](#available-prompts)
@@ -37,16 +37,16 @@ A focused Model Context Protocol (MCP) server designed as your project's memory 
 - **Entity Management**: Projects, tasks, people, resources with rich metadata
 - **Relationship Mapping**: Dependencies, ownership, blockers, and connections
 - **Observation Tracking**: Contextual notes and progress updates
-- **Semantic Search**: Full-text search across all project knowledge
-- **Centralized Persistence**: Automatically locates the Git root to ensure a single, unified `memory.db` across all nested directories
-- **Smart Pre-Commit Hooks**: Dynamically detects project type (Python, Node.js, etc.) and enforces global pre-commit policies on initialization
+- **Text Search**: Case-insensitive matching across entity names, types, observations, and relations
+- **Centralized Persistence**: Stores `memory.db` at the Git root, or under `$XDG_DATA_HOME/project-guardian` outside a Git repository
+- **Optional Pre-Commit Setup**: Installs a generated configuration only when both Git and `pre-commit` are available
 
 ### Streamlined Database Operations
 - **Single Database**: Uses only `memory.db` for all operations
 - **Core CRUD**: Essential database operations (query, insert, update, delete)
 - **SQL Execution**: Direct SQL query execution
 - **Data Transfer**: Import/export CSV and JSON files
-- **18 Tools Total**: Focused toolset for maximum clarity
+- **18 Tools Total**: Seven database tools, ten memory tools, and one guidance tool
 
 ### AI Guidance System
 - **10 Resources**: Templates, best practices, cached data, and comprehensive project status
@@ -58,16 +58,16 @@ A focused Model Context Protocol (MCP) server designed as your project's memory 
 ### Advanced Features
 - **Schema Validation**: Comprehensive input validation with Zod schemas
 - **Error Handling**: Detailed error messages and graceful failure handling
-- **Connection Management**: Automatic connection pooling and cleanup
-- **File Integration**: Seamless integration with filesystem operations
-- **Performance**: Optimized for large datasets and batch operations
+- **Connection Management**: Bounded 20-connection LRU cache with shutdown cleanup
+- **File Integration**: CSV and SQL imports are streamed; CSV writes use bounded string assembly
+- **Result Limits**: Unbounded raw `SELECT` queries are capped at 10,000 rows
 
 ### Enterprise Features
 - **TypeScript**: Fully typed with comprehensive error handling
 - **Input Validation**: Zod schema validation for all parameters
 - **Error Recovery**: Graceful error handling with detailed error messages
 - **Resource Management**: Automatic cleanup of connections and resources
-- **Testing**: Comprehensive Jest test suite with high coverage
+- **Testing**: Seven Jest suites with 73 passing tests
 
 ## Requirements
 
@@ -101,7 +101,12 @@ For production (creates an optimized, minified bundle):
 npm run build:prod
 ```
 
-4. **Test the server:**
+4. **Run the test suite:**
+```bash
+npm test
+```
+
+5. **Start the server:**
 ```bash
 npm start
 ```
@@ -117,7 +122,7 @@ When you pull new updates or modify the code, you must rebuild the server and re
 
 ## Available Tools
 
-This MCP server provides **exactly 18 focused tools** for project guardianship:
+This MCP server currently provides **18 tools**:
 
 ### Database Operations (7 tools)
 
@@ -180,7 +185,7 @@ Export memory.db table data to CSV or JSON file.
 - `conditions` (optional): WHERE conditions to filter export
 - `options` (optional): Export options (delimiter, includeHeader)
 
-### Project Guardian Memory Tools (11 tools)
+### Memory and Guidance Tools (11 tools)
 
 #### `initialize_memory` - Initialize Memory System
 Set up the project memory database schema and tables.
@@ -300,7 +305,7 @@ Recent additions, updates, and modifications to the knowledge graph for audit an
 
 ### Available Prompts
 
-Project Guardian offers **28 specialized prompts** covering all aspects of comprehensive project management, from basic setup to advanced enterprise workflows:
+Project Guardian offers **27 prompts** covering project setup, planning, quality, operations, and incident workflows:
 
 #### Core Project Management
 #### `project-setup` - Project Initialization
@@ -653,7 +658,7 @@ Add this server to your Claude Desktop configuration (`claude_desktop_config.jso
 project-guardian-mcp-server/
 ├── src/
 │   ├── index.ts              # Main entry point
-│   ├── server.ts             # MCP server orchestrator (161 lines, fully modularized)
+│   ├── server.ts             # MCP server orchestrator
 │   ├── memory-manager.ts     # Knowledge graph and entity management
 │   ├── sqlite-manager.ts     # Database operations and connection management
 │   ├── import-export.ts      # CSV/JSON data import and export functionality
@@ -663,7 +668,8 @@ project-guardian-mcp-server/
 │   ├── tools/
 │   │   ├── tool-registry.ts     # Tool definitions and listing
 │   │   ├── database-tools.ts    # Database operation tool schemas
-│   │   └── memory-tools.ts      # Memory management tool schemas
+│   │   ├── memory-tools.ts      # Memory management tool schemas
+│   │   └── guidance-tools.ts    # Guidance tool schema
 │   ├── resources/
 │   │   ├── resource-registry.ts  # Resource definitions and handlers
 │   │   ├── resource-definitions.ts # Static resource metadata
@@ -679,7 +685,8 @@ project-guardian-mcp-server/
 │   ├── prompt-registry.test.ts
 │   ├── request-handlers.test.ts
 │   ├── import-export.test.ts
-│   └── sqlite-manager.test.ts
+│   ├── sqlite-manager.test.ts
+│   └── bug-fixes.test.ts
 ├── dist/                     # Compiled JavaScript output (optimized for production)
 ├── memory.db                 # SQLite database file (created on first run)
 ├── package.json              # Project dependencies and scripts
@@ -691,25 +698,25 @@ project-guardian-mcp-server/
 
 ### Key Components
 
-- **server.ts**: Clean orchestrator (161 lines) coordinating modular components
+- **server.ts**: MCP server lifecycle, transport, handlers, and shutdown coordination
 - **handlers/request-handlers.ts**: Central dispatcher routing tool calls to appropriate managers
 - **tools/**: Tool definition and registration system (18 tools total)
   - `tool-registry.ts`: Lists all available tools
   - `database-tools.ts`: Database operation schemas (7 tools)
   - `memory-tools.ts`: Memory management schemas (10 tools)
   - `guidance-tools.ts`: Autonomous guidance tool schema (1 tool)
-- **resources/**: Resource management system (11 resources total)
+- **resources/**: Resource management system (10 resources total)
   - `resource-registry.ts`: Resource listing and content serving
   - `resource-definitions.ts`: Static resource metadata
   - `resource-handlers.ts`: Dynamic content generation
-- **prompts/**: Prompt management system (28 prompts total)
+- **prompts/**: Prompt management system (27 prompts total)
   - `prompt-registry.ts`: Prompt listing and content serving
   - `prompt-definitions.ts`: Static prompt metadata
   - `prompt-handlers.ts`: Dynamic prompt generation with context
   - `behavioral-protocol.ts`: Centralized Behavioral Protocol system message used by all prompts
 - **memory-manager.ts**: Knowledge graph operations for entities, relationships, and observations
-- **sqlite-manager.ts**: Database abstraction layer with connection pooling and schema management
-- **import-export.ts**: Data transfer utilities for CSV and JSON formats
+- **sqlite-manager.ts**: Database abstraction with bounded connection caching and schema management
+- **import-export.ts**: CSV, JSON, and SQL data transfer utilities
 - **types.ts**: Zod schemas for input validation and TypeScript type safety
 
 ## Development
@@ -741,7 +748,12 @@ For a production-optimized build:
 npm run build:prod
 ```
 
-4. **Test the server:**
+4. **Run tests:**
+```bash
+npm test
+```
+
+5. **Start the server:**
 ```bash
 npm start
 ```
