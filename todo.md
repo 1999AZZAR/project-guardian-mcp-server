@@ -70,17 +70,12 @@
 - **File:** `src/handlers/request-handlers.ts:15-132`
 - **Fix:** Parse `args` with Zod schemas before use.
 
-## Priority: Medium — UNFIXED
+## Sprint 1: Security & Robustness — MEDIUM
 
 ### [M3] Shell injection in `find` command
 `execAsync(\`find "\${targetRoot}" ...\`)` — if repo path contains backticks, `$()`, semicolons, arbitrary commands execute.
 - **File:** `src/memory-manager.ts:192`
 - **Fix:** Use `cp.execFile('find', [...])` no shell.
-
-### [M4] Unbounded `find` output
-`execAsync` captures entire `find` stdout. A repo with 100k `.db` files fills RAM.
-- **File:** `src/memory-manager.ts:192-193`
-- **Fix:** Stream via `spawn` + line reader.
 
 ### [M5] SQL injection via ATTACH DATABASE filename
 `ATTACH DATABASE '${dbPath}' AS nested` — a file with `'` breaks SQL; `'; DROP TABLE entities;--.db` is exploitable.
@@ -101,6 +96,13 @@ Double SIGINT races `closeAllConnections`; if close hangs, process never exits.
 `Promise.race` rejects but the child process continues running.
 - **File:** `src/memory-manager.ts:126`
 - **Fix:** Use `AbortController` + `kill()` on timeout.
+
+## Sprint 2: Memory & Data Integrity — MEDIUM
+
+### [M4] Unbounded `find` output
+`execAsync` captures entire `find` stdout. A repo with 100k `.db` files fills RAM.
+- **File:** `src/memory-manager.ts:192-193`
+- **Fix:** Stream via `spawn` + line reader.
 
 ### [M9] `JSON.parse` on DB rows without try-catch
 Corrupted `observations` column crashes `readGraph`/`searchNodes`/`openNode`.
@@ -173,6 +175,6 @@ No guard against registering SIGINT/SIGTERM handlers twice.
 - [ ] M10 — `??` instead of `||` in CSV
 - [ ] M11 — Stream SQL import
 - [ ] M12 — Cap scattered DB merge
-- [ ] L3 — deleteEntity transaction
-- [ ] L4 — Dedup signal handlers
-- [ ] L5 — Partial failure reporting
+- [x] L3 — deleteEntity transaction
+- [x] L4 — Dedup signal handlers
+- [x] L5 — Partial failure reporting
