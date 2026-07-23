@@ -159,10 +159,10 @@ No guard against registering SIGINT/SIGTERM handlers twice.
 - [x] H3 — Proper `db.close()` Promise in `createDatabase` and `initializeDefaultDatabase`
 - [x] M1 — `which pre-commit` guard before config write/install
 - [x] M2 — Active `console.error`/`console.warn` in all catch blocks
-- [ ] LK1 — Connection map LRU eviction
-- [ ] LK2 — Row limit in `query()`
-- [ ] LK3 — Stream imports
-- [ ] LK4 — Array-join CSV export
+- [x] LK1 — Connection map LRU eviction
+- [x] LK2 — Row limit in `query()`
+- [x] LK3 — Stream imports
+- [x] LK4 — Array-join CSV export
 - [x] V1 — ORDER BY sanitization
 - [x] V2 — Zod validation in request handlers
 - [x] M3 — `execFile` instead of `execAsync` for find
