@@ -397,7 +397,9 @@ export class SQLiteManager {
       }
       
       if (orderBy) {
-        sql += ` ORDER BY ${orderBy} ${orderDirection || 'ASC'}`;
+        const sanitized = orderBy.replace(/[^a-zA-Z0-9_]/g, '');
+        const dir = orderDirection === 'DESC' ? 'DESC' : 'ASC';
+        sql += ` ORDER BY ${sanitized} ${dir}`;
       }
       
       if (limit) {

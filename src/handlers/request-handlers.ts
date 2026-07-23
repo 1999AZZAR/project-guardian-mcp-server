@@ -3,6 +3,32 @@ import { SQLiteManager } from '../sqlite-manager.js';
 import { MemoryManager } from '../memory-manager.js';
 import { ImportExportManager } from '../import-export.js';
 import { PromptHandlers } from '../prompts/prompt-handlers.js';
+import { z } from 'zod';
+import {
+  ExecuteSqlSchema, QueryDataSchema, InsertDataSchema, UpdateDataSchema,
+  DeleteDataSchema, ImportFromFileSchema, ExportToFileSchema,
+  CreateEntitiesSchema, CreateRelationsSchema, AddObservationsSchema,
+  DeleteEntitiesSchema, DeleteObservationsSchema, DeleteRelationsSchema,
+  SearchNodesSchema, OpenNodesSchema
+} from '../types.js';
+
+const toolSchemas: Record<string, z.ZodSchema> = {
+  execute_sql: ExecuteSqlSchema.omit({ database: true }),
+  query_data: QueryDataSchema.omit({ database: true }),
+  insert_data: InsertDataSchema.omit({ database: true }),
+  update_data: UpdateDataSchema.omit({ database: true }),
+  delete_data: DeleteDataSchema.omit({ database: true }),
+  import_data: ImportFromFileSchema.omit({ database: true }),
+  export_data: ExportToFileSchema.omit({ database: true }),
+  create_entity: CreateEntitiesSchema,
+  create_relation: CreateRelationsSchema,
+  add_observation: AddObservationsSchema,
+  delete_entity: DeleteEntitiesSchema,
+  delete_observation: DeleteObservationsSchema,
+  delete_relation: DeleteRelationsSchema,
+  search_nodes: SearchNodesSchema,
+  open_node: OpenNodesSchema,
+};
 
 export class RequestHandlers {
   constructor(
@@ -14,16 +40,19 @@ export class RequestHandlers {
 
   async handleToolCall(name: string, args: any): Promise<any> {
     try {
-      // Database operations
+      const schema = toolSchemas[name];
+      if (schema) {
+        args = schema.parse(args);
+      }
+
       if (['execute_sql', 'query_data', 'insert_data', 'update_data', 'delete_data', 'import_data', 'export_data'].includes(name)) {
         return await this.handleDatabaseTool(name, args);
       }
 
-      // Memory operations
       if (['initialize_memory', 'create_entity', 'create_relation', 'add_observation', 'delete_entity', 'delete_observation', 'delete_relation', 'read_graph', 'search_nodes', 'open_node'].includes(name)) {
         return await this.handleMemoryTool(name, args);
       }
-      // Guidance operations
+
       if (name === 'get_project_guidance') {
         const guidanceContent = await this.promptHandlers.handleGetPrompt(args.guidance_name, args.arguments || {});
         return {
