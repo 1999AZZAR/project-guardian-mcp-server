@@ -163,8 +163,8 @@ No guard against registering SIGINT/SIGTERM handlers twice.
 - [ ] LK2 — Row limit in `query()`
 - [ ] LK3 — Stream imports
 - [ ] LK4 — Array-join CSV export
-- [ ] V1 — ORDER BY sanitization
-- [ ] V2 — Zod validation in request handlers
+- [x] V1 — ORDER BY sanitization
+- [x] V2 — Zod validation in request handlers
 - [x] M3 — `execFile` instead of `execAsync` for find
 - [x] M4 — Stream find output
 - [x] M5 — Escape ATTACH filename
