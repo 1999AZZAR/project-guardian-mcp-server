@@ -70,7 +70,7 @@
 - **File:** `src/handlers/request-handlers.ts:15-132`
 - **Fix:** Parse `args` with Zod schemas before use.
 
-## Sprint 1: Security & Robustness — MEDIUM
+## Sprint 1: Security & Robustness — FIXED
 
 ### [M3] Shell injection in `find` command
 `execAsync(\`find "\${targetRoot}" ...\`)` — if repo path contains backticks, `$()`, semicolons, arbitrary commands execute.
@@ -165,12 +165,12 @@ No guard against registering SIGINT/SIGTERM handlers twice.
 - [ ] LK4 — Array-join CSV export
 - [ ] V1 — ORDER BY sanitization
 - [ ] V2 — Zod validation in request handlers
-- [ ] M3 — `execFile` instead of `execAsync` for find
+- [x] M3 — `execFile` instead of `execAsync` for find
 - [ ] M4 — Stream find output
-- [ ] M5 — Escape ATTACH filename
-- [ ] M6 — execSync timeout
-- [ ] M7 — Shutdown debounce + timeout
-- [ ] M8 — AbortController for pre-commit
+- [x] M5 — Escape ATTACH filename
+- [x] M6 — execSync timeout
+- [x] M7 — Shutdown debounce + timeout
+- [x] M8 — AbortController for pre-commit
 - [ ] M9 — Try-catch JSON.parse on DB rows
 - [ ] M10 — `??` instead of `||` in CSV
 - [ ] M11 — Stream SQL import
