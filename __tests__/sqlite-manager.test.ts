@@ -1,6 +1,6 @@
 import { SQLiteManager } from '../src/sqlite-manager';
-import { existsSync, unlinkSync, rmdirSync } from 'fs';
-import { join } from 'path';
+import { existsSync, unlinkSync, rmdirSync, readdirSync } from 'fs';
+import { join, resolve } from 'path';
 
 describe('SQLiteManager', () => {
   let sqliteManager: SQLiteManager;
@@ -45,11 +45,8 @@ describe('SQLiteManager', () => {
       const firstResult = await sqliteManager.createDatabase('test_db');
       expect(firstResult.success).toBe(true);
 
-      // Verify file exists
-      const fs = require('fs');
-      const path = require('path');
-      const dbPath = path.join(testDbPath, 'test_db.db');
-      expect(fs.existsSync(dbPath)).toBe(true);
+      const dbPath = join(testDbPath, 'test_db.db');
+      expect(existsSync(dbPath)).toBe(true);
 
       const result = await sqliteManager.createDatabase('test_db');
 
@@ -65,7 +62,7 @@ describe('SQLiteManager', () => {
 
       expect(result.success).toBe(true);
       expect(result.data.length).toBeGreaterThanOrEqual(3); // memory + test_db1 + test_db2
-      const testDbs = result.data.filter(db => db.name.startsWith('test_db'));
+      const testDbs = result.data.filter((db: any) => db.name.startsWith('test_db'));
       expect(testDbs).toHaveLength(2);
       expect(testDbs[0]).toHaveProperty('name');
       expect(testDbs[0]).toHaveProperty('type', 'sqlite');

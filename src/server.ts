@@ -12,6 +12,8 @@ import { SQLiteManager } from './sqlite-manager.js';
 import { ImportExportManager } from './import-export.js';
 import { MemoryManager } from './memory-manager.js';
 import { execSync } from 'child_process';
+import { join } from 'path';
+import { homedir } from 'os';
 
 // Modular imports
 import { allTools } from './tools/tool-registry.js';
@@ -33,11 +35,14 @@ export class DatabaseMCPServer {
 
   constructor() {
     // Determine the git root or fallback to cwd for the database
-    let dbPath = '.';
+    let dbPath: string;
     try {
-      dbPath = execSync('git rev-parse --show-toplevel', { encoding: 'utf-8' }).trim();
-    } catch (e) {
-      // Not a git repository, fallback to '.'
+      const output = execSync('git rev-parse --show-toplevel 2>/dev/null', { encoding: 'utf-8' }).trim();
+      if (!output) throw new Error();
+      dbPath = output;
+    } catch {
+      const dataHome = process.env.XDG_DATA_HOME || join(homedir(), '.local', 'share');
+      dbPath = join(dataHome, 'project-guardian');
     }
 
     // Use only memory.db for all operations
@@ -73,7 +78,6 @@ export class DatabaseMCPServer {
     this.setupResourceHandlers();
     this.setupPromptHandlers();
     this.setupErrorHandling();
-    this.initializeMemorySystem();
   }
 
   private setupToolHandlers(): void {
@@ -146,9 +150,8 @@ export class DatabaseMCPServer {
   private async initializeMemorySystem(): Promise<void> {
     try {
       await this.memoryManager.initializeMemoryDatabase();
-       // console.error('Memory system initialized successfully');
     } catch (error) {
-       // console.error('Failed to initialize memory system:', error);
+      console.error('Failed to initialize memory system:', error);
     }
   }
 
@@ -205,7 +208,7 @@ export class DatabaseMCPServer {
 
   private setupErrorHandling(): void {
     this.server.onerror = (error) => {
-       // console.error('[MCP Error]', error);
+      console.error('[MCP Error]', error);
     };
 
     process.on('SIGINT', async () => {
@@ -223,6 +226,6 @@ export class DatabaseMCPServer {
     await this.initializeMemorySystem();
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
-     // console.error('Project Guardian MCP server running on stdio');
+      console.error('Project Guardian MCP server running on stdio');
   }
 }

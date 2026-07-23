@@ -20,18 +20,27 @@ export class MemoryManager {
     
     let targetRoot = process.cwd();
     try {
-      const { stdout } = await execAsync('git rev-parse --show-toplevel');
+      const { stdout } = await execAsync('git rev-parse --show-toplevel 2>/dev/null');
       targetRoot = stdout.trim();
     } catch (e) {
       // Not a git repository, fallback to cwd
     }
 
-    // Pre-commit hook initialization
+    // Pre-commit hook initialization — only in git repos with pre-commit installed
+    try {
+      await execAsync('which pre-commit', { cwd: targetRoot });
+    } catch {
+      // pre-commit not installed, skip
+    }
+    try {
+      await execAsync('git rev-parse --git-dir 2>/dev/null', { cwd: targetRoot });
+    } catch {
+      // Not a git repository, skip pre-commit
+    }
     try {
       const preCommitConfigPath = path.join(targetRoot, '.pre-commit-config.yaml');
       
       if (!fs.existsSync(preCommitConfigPath)) {
-        // Detect project characteristics
         const hasPython = fs.existsSync(path.join(targetRoot, 'requirements.txt')) || 
                           fs.existsSync(path.join(targetRoot, 'pyproject.toml')) || 
                           fs.existsSync(path.join(targetRoot, 'setup.py'));
@@ -39,7 +48,6 @@ export class MemoryManager {
 
         let repos = [];
 
-        // Universal hooks
         repos.push(`  - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.6.0
     hooks:
@@ -100,13 +108,16 @@ export class MemoryManager {
 
         const preCommitContent = `repos:\n${repos.join('\n\n')}\n`;
         fs.writeFileSync(preCommitConfigPath, preCommitContent, 'utf8');
-        await execAsync('pre-commit install', { cwd: targetRoot });
-         // console.error('Pre-commit hooks enforced at ' + targetRoot + ' successfully.');
-      } else {
-         // console.error('Pre-commit config already exists at ' + targetRoot + ', skipping initialization.');
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('pre-commit install timed out')), 30000)
+        );
+        await Promise.race([
+          execAsync('pre-commit install', { cwd: targetRoot }),
+          timeoutPromise
+        ]);
       }
     } catch (err) {
-       // console.warn('Failed to enforce pre-commit hooks:', err);
+      console.warn('Failed to enforce pre-commit hooks:', err);
     }
 
     // Gitignore initialization
@@ -121,7 +132,7 @@ export class MemoryManager {
         fs.writeFileSync(gitignorePath, '# Project Guardian\nmemory.db\nmemory.db-journal\n', 'utf8');
       }
     } catch (err) {
-       // console.warn('Failed to update .gitignore:', err);
+      console.warn('Failed to update .gitignore:', err);
     }
 
     // Create entities table
@@ -164,41 +175,41 @@ export class MemoryManager {
       'CREATE INDEX IF NOT EXISTS idx_entities_type ON entities(entity_type)'
     );
     if (!typeIndexResult.success) {
-       // console.warn('Failed to create entity type index:', typeIndexResult.error);
+      console.warn('Failed to create entity type index:', typeIndexResult.error);
     }
 
     const updatedIndexResult = await this.sqliteManager.executeSql(this.memoryDbName,
       'CREATE INDEX IF NOT EXISTS idx_entities_updated ON entities(updated_at)'
     );
     if (!updatedIndexResult.success) {
-       // console.warn('Failed to create entity updated index:', updatedIndexResult.error);
+      console.warn('Failed to create entity updated index:', updatedIndexResult.error);
     }
 
-    // Check for and combine scattered memory.db files in subdirectories
-    try {
-      const rootDbPath = path.join(targetRoot, 'memory.db');
-      const { stdout: findOut } = await execAsync(`find "${targetRoot}" -mindepth 2 -type f -name memory.db`);
-      const scatteredDbs = findOut.trim().split('\n').filter(Boolean);
-      
-      for (const dbPath of scatteredDbs) {
-        if (dbPath === rootDbPath) continue;
+    // Scattered DB consolidation — skip for home dir (too expensive)
+    if (targetRoot !== (process.env.HOME || '')) {
+      try {
+        const rootDbPath = path.join(targetRoot, 'memory.db');
+        const { stdout: findOut } = await execAsync(`find "${targetRoot}" -mindepth 2 -type f -name memory.db`);
+        const scatteredDbs = findOut.trim().split('\n').filter(Boolean);
         
-         // console.error(`Found scattered memory.db at ${dbPath}. Auto-combining...`);
-        try {
-          await this.sqliteManager.executeSql(this.memoryDbName, `ATTACH DATABASE '${dbPath}' AS nested`);
-          await this.sqliteManager.executeSql(this.memoryDbName, `INSERT OR IGNORE INTO entities SELECT * FROM nested.entities`);
-          await this.sqliteManager.executeSql(this.memoryDbName, `INSERT OR IGNORE INTO relations SELECT * FROM nested.relations`);
-          await this.sqliteManager.executeSql(this.memoryDbName, `DETACH DATABASE nested`);
+        for (const dbPath of scatteredDbs) {
+          if (dbPath === rootDbPath) continue;
           
-          fs.unlinkSync(dbPath);
-           // console.error(`Successfully merged and removed scattered database: ${dbPath}`);
-        } catch (mergeErr) {
-           // console.error(`Failed to merge scattered database ${dbPath}:`, mergeErr);
-          try { await this.sqliteManager.executeSql(this.memoryDbName, `DETACH DATABASE nested`); } catch (e) {}
+          try {
+            await this.sqliteManager.executeSql(this.memoryDbName, `ATTACH DATABASE '${dbPath}' AS nested`);
+            await this.sqliteManager.executeSql(this.memoryDbName, `INSERT OR IGNORE INTO entities SELECT * FROM nested.entities`);
+            await this.sqliteManager.executeSql(this.memoryDbName, `INSERT OR IGNORE INTO relations SELECT * FROM nested.relations`);
+            await this.sqliteManager.executeSql(this.memoryDbName, `DETACH DATABASE nested`);
+            
+            fs.unlinkSync(dbPath);
+          } catch (mergeErr) {
+            console.error(`Failed to merge scattered database ${dbPath}:`, mergeErr);
+            try { await this.sqliteManager.executeSql(this.memoryDbName, `DETACH DATABASE nested`); } catch (e) {}
+          }
         }
+      } catch (e) {
+        console.warn('Scattered DB scan failed:', e);
       }
-    } catch (e) {
-      // Find command might fail on some platforms or no files found
     }
   }
 
@@ -242,8 +253,7 @@ export class MemoryManager {
         const created = await this.createEntity(entity.name, entity.entityType, entity.observations);
         results.push(created);
       } catch (error) {
-        // Continue with other entities if one fails
-         // console.error(`Failed to create entity ${entity.name}:`, error);
+        console.error(`Failed to create entity ${entity.name}:`, error);
       }
     }
 
@@ -291,7 +301,7 @@ export class MemoryManager {
         const created = await this.createRelation(relation.from, relation.to, relation.relationType);
         results.push(created);
       } catch (error) {
-         // console.error(`Failed to create relation ${relation.from} -> ${relation.to}:`, error);
+        console.error(`Failed to create relation ${relation.from} -> ${relation.to}:`, error);
       }
     }
 
@@ -337,7 +347,7 @@ export class MemoryManager {
         const updated = await this.addObservation(obs.entityName, obs.contents);
         results.push(updated);
       } catch (error) {
-         // console.error(`Failed to add observations to entity ${obs.entityName}:`, error);
+        console.error(`Failed to add observations to entity ${obs.entityName}:`, error);
       }
     }
 
@@ -401,7 +411,7 @@ export class MemoryManager {
         const updated = await this.deleteObservation(deletion.entityName, deletion.observations);
         results.push(updated);
       } catch (error) {
-         // console.error(`Failed to delete observations from entity ${deletion.entityName}:`, error);
+        console.error(`Failed to delete observations from entity ${deletion.entityName}:`, error);
       }
     }
 

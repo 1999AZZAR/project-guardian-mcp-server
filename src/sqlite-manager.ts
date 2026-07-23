@@ -32,9 +32,10 @@ export class SQLiteManager {
     try {
       const dbPath = this.getDatabasePath(this.defaultDatabaseName);
       if (!existsSync(dbPath)) {
-        // Create the default memory database
         const db = new sqlite3.Database(dbPath);
-        await this.closeConnection(this.defaultDatabaseName);
+        await new Promise<void>((resolve, reject) => {
+          db.close((err) => (err ? reject(err) : resolve()));
+        });
       }
     } catch (error) {
       console.error('Failed to initialize default database:', error);
@@ -68,8 +69,10 @@ export class SQLiteManager {
       }
 
       const db = new sqlite3.Database(dbPath);
-      await this.closeConnection(name);
-      
+      await new Promise<void>((resolve, reject) => {
+        db.close((err) => (err ? reject(err) : resolve()));
+      });
+
       const executionTime = Date.now() - startTime;
       return {
         success: true,
@@ -213,6 +216,7 @@ export class SQLiteManager {
         executionTime
       };
     } catch (error) {
+      console.error(`Failed to create table '${tableName}':`, error);
       return {
         success: false,
         message: `Failed to create table '${tableName}'`,
