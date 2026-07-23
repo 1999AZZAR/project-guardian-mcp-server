@@ -206,20 +206,23 @@ export class DatabaseMCPServer {
     });
   }
 
+  private static shutdownHandlersRegistered = false;
+
   private setupErrorHandling(): void {
     this.server.onerror = (error) => {
       console.error('[MCP Error]', error);
     };
 
-    process.on('SIGINT', async () => {
-      await this.sqliteManager.closeAllConnections();
-      process.exit(0);
-    });
+    if (DatabaseMCPServer.shutdownHandlersRegistered) return;
+    DatabaseMCPServer.shutdownHandlersRegistered = true;
 
-    process.on('SIGTERM', async () => {
+    const shutdown = async () => {
       await this.sqliteManager.closeAllConnections();
       process.exit(0);
-    });
+    };
+
+    process.on('SIGINT', shutdown);
+    process.on('SIGTERM', shutdown);
   }
 
   async run(): Promise<void> {

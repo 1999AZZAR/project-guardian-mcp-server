@@ -96,23 +96,47 @@ export class RequestHandlers {
 
       case 'create_entity':
         const entities = await this.memoryManager.createEntities(args.entities);
-        return { success: true, data: entities, message: `Created ${entities.length} entities` };
+        const failedEntities = args.entities.length - entities.length;
+        return {
+          success: true, data: entities,
+          message: failedEntities > 0
+            ? `Created ${entities.length}/${args.entities.length} entities (${failedEntities} failed)`
+            : `Created ${entities.length} entities`
+        };
 
       case 'create_relation':
         const relations = await this.memoryManager.createRelations(args.relations);
-        return { success: true, data: relations, message: `Created ${relations.length} relations` };
+        const failedRelations = args.relations.length - relations.length;
+        return {
+          success: true, data: relations,
+          message: failedRelations > 0
+            ? `Created ${relations.length}/${args.relations.length} relations (${failedRelations} failed)`
+            : `Created ${relations.length} relations`
+        };
 
       case 'add_observation':
-        await this.memoryManager.addObservations(args.observations);
-        return { success: true, message: `Added observations to ${args.observations.length} entities` };
+        const obsResults = await this.memoryManager.addObservations(args.observations);
+        const failedObs = args.observations.length - obsResults.length;
+        return {
+          success: true,
+          message: failedObs > 0
+            ? `Added observations to ${obsResults.length}/${args.observations.length} entities (${failedObs} failed)`
+            : `Added observations to ${args.observations.length} entities`
+        };
 
       case 'delete_entity':
         await this.memoryManager.deleteEntities(args.entityNames);
         return { success: true, message: `Deleted ${args.entityNames.length} entities` };
 
       case 'delete_observation':
-        await this.memoryManager.deleteObservations(args.deletions);
-        return { success: true, message: `Deleted observations from ${args.deletions.length} entities` };
+        const delResults = await this.memoryManager.deleteObservations(args.deletions);
+        const failedDel = args.deletions.length - delResults.length;
+        return {
+          success: true,
+          message: failedDel > 0
+            ? `Deleted observations from ${delResults.length}/${args.deletions.length} entities (${failedDel} failed)`
+            : `Deleted observations from ${args.deletions.length} entities`
+        };
 
       case 'delete_relation':
         await this.memoryManager.deleteRelations(args.relations);

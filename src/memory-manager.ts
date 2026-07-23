@@ -355,15 +355,19 @@ export class MemoryManager {
   }
 
   async deleteEntity(entityName: string): Promise<void> {
-    // Delete relations first (cascade)
-    await this.sqliteManager.deleteData(this.memoryDbName, 'relations',
-      { from_entity: entityName });
-    await this.sqliteManager.deleteData(this.memoryDbName, 'relations',
-      { to_entity: entityName });
-
-    // Delete entity
-    await this.sqliteManager.deleteData(this.memoryDbName, 'entities',
-      { name: entityName });
+    await this.sqliteManager.executeSql(this.memoryDbName, 'BEGIN TRANSACTION');
+    try {
+      await this.sqliteManager.deleteData(this.memoryDbName, 'relations',
+        { from_entity: entityName });
+      await this.sqliteManager.deleteData(this.memoryDbName, 'relations',
+        { to_entity: entityName });
+      await this.sqliteManager.deleteData(this.memoryDbName, 'entities',
+        { name: entityName });
+      await this.sqliteManager.executeSql(this.memoryDbName, 'COMMIT');
+    } catch (error) {
+      await this.sqliteManager.executeSql(this.memoryDbName, 'ROLLBACK');
+      throw error;
+    }
   }
 
   async deleteEntities(entityNames: string[]): Promise<void> {

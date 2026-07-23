@@ -36,13 +36,114 @@
 ### [M2] No error logging anywhere
 **Fix applied:** All catch blocks across 4 source files now call `console.error` or `console.warn` with structured error context. Zero `// console.error` comments remain.
 
-## Priority: Low — UNCHANGED
+## Priority: High — Leaks & Overflow (UNFIXED)
+
+### [LK1] Connection map unbounded growth
+`connections: Map<string, sqlite3.Database>` in `getConnection()` grows without eviction. Every unique database name creates a permanent SQLite connection + file descriptor that lives until `closeAllConnections()`. Long-running server with many `createDatabase` calls leaks FDs.
+- **File:** `src/sqlite-manager.ts:15,49-56`
+- **Fix:** LRU eviction at ~20 connections or close-after-use for non-`memory` databases.
+
+### [LK2] No row limit in `query()` — unbounded result sets
+`db.all()` loads ALL matching rows into one array. `execute_sql` with `SELECT *` on a million-row table OOMs. `queryData()` appends LIMIT but raw SQL via `executeSql` bypasses it entirely.
+- **File:** `src/sqlite-manager.ts:628-634`
+- **Fix:** Hard cap (10k rows) in `query()` unless explicitly overridden.
+
+### [LK3] Import loads entire file into memory
+`readFileSync` + `.split('\n')` / `JSON.parse` loads whole file into RAM. A 2GB CSV/JSON causes OOM. Also builds unbounded `records[]` array before any DB insert.
+- **File:** `src/import-export.ts:146,209,222`
+- **Fix:** Stream + batch insert (1k rows per batch).
+
+### [LK4] O(n²) string concatenation in CSV export
+`content += values.join(delimiter)` in a loop — each iteration copies the entire previous string. 100k rows generates ~5GB temporary string allocations.
+- **File:** `src/import-export.ts:266-270`
+- **Fix:** Build array of lines, `join('\n')` at the end.
+
+## Priority: High — Input Validation (UNFIXED)
+
+### [V1] SQL injection in ORDER BY clause
+`orderBy` is interpolated directly into SQL without sanitization. Could inject `; DROP TABLE entities;--`.
+- **File:** `src/sqlite-manager.ts:400`
+- **Fix:** Validate `orderBy` against known column names; validate `orderDirection` server-side.
+
+### [V2] Zod schemas defined but never applied
+`types.ts` has full Zod schemas (`ExecuteSqlSchema`, `QueryDataSchema`, etc.) but `request-handlers.ts` never imports/uses them. `args` passes through unchecked.
+- **File:** `src/handlers/request-handlers.ts:15-132`
+- **Fix:** Parse `args` with Zod schemas before use.
+
+## Priority: Medium — UNFIXED
+
+### [M3] Shell injection in `find` command
+`execAsync(\`find "\${targetRoot}" ...\`)` — if repo path contains backticks, `$()`, semicolons, arbitrary commands execute.
+- **File:** `src/memory-manager.ts:192`
+- **Fix:** Use `cp.execFile('find', [...])` no shell.
+
+### [M4] Unbounded `find` output
+`execAsync` captures entire `find` stdout. A repo with 100k `.db` files fills RAM.
+- **File:** `src/memory-manager.ts:192-193`
+- **Fix:** Stream via `spawn` + line reader.
+
+### [M5] SQL injection via ATTACH DATABASE filename
+`ATTACH DATABASE '${dbPath}' AS nested` — a file with `'` breaks SQL; `'; DROP TABLE entities;--.db` is exploitable.
+- **File:** `src/memory-manager.ts:199`
+- **Fix:** Escape single quotes: `dbPath.replace(/'/g, "''")`.
+
+### [M6] `execSync` no timeout in constructor
+`execSync('git rev-parse ...')` — stale `.git/index.lock` or NFS hang blocks constructor forever.
+- **File:** `src/server.ts:40`
+- **Fix:** Add `timeout: 5000` to execSync options.
+
+### [M7] Shutdown race + no timeout
+Double SIGINT races `closeAllConnections`; if close hangs, process never exits.
+- **File:** `src/server.ts:214-222`
+- **Fix:** Debounce signals, add 5s shutdown timeout.
+
+### [M8] Zombie process on pre-commit timeout
+`Promise.race` rejects but the child process continues running.
+- **File:** `src/memory-manager.ts:126`
+- **Fix:** Use `AbortController` + `kill()` on timeout.
+
+### [M9] `JSON.parse` on DB rows without try-catch
+Corrupted `observations` column crashes `readGraph`/`searchNodes`/`openNode`.
+- **File:** `src/memory-manager.ts:442,477,513`
+- **Fix:** Wrap in try-catch, fallback to `[]`.
+
+### [M10] `0`/`false` silently lost in CSV export
+`value || ''` converts `0` and `false` to empty string.
+- **File:** `src/import-export.ts:268`
+- **Fix:** `value ?? ''`.
+
+### [M11] No streaming in SQL import
+Entire SQL dump loaded into memory then `.split(';')`.
+- **File:** `src/import-export.ts:222-225`
+- **Fix:** Chunked reading or readline interface.
+
+### [M12] Scattered DB merge — unbounded loop
+Thousands of memory.db files block startup for minutes.
+- **File:** `src/memory-manager.ts:195-209`
+- **Fix:** Cap at 100 files, warn and skip rest.
+
+## Priority: Low — UNFIXED
 
 ### [L1] Hardcoded model references in BEHAVIORAL_PROTOCOL_SYSTEM_MESSAGE
 The behavioral protocol prompt hardcodes model names like `deepseek-v4-flash-free`. These go stale when models are added/removed.
 
 ### [L2] Constructor uses async method synchronously
 Already addressed by C2 fix.
+
+### [L3] No transaction in `deleteEntity()` cascade
+Three separate `deleteData` calls — if middle one fails, orphaned relations.
+- **File:** `src/memory-manager.ts:357-367`
+- **Fix:** Wrap in `BEGIN`/`COMMIT`/`ROLLBACK`.
+
+### [L4] Duplicate signal handler registration
+No guard against registering SIGINT/SIGTERM handlers twice.
+- **File:** `src/server.ts:214-222`
+- **Fix:** Dedup flag.
+
+### [L5] Partial failures silently swallowed in batch tools
+`createEntities` returns success even if some items fail.
+- **File:** `src/handlers/request-handlers.ts:98,102`
+- **Fix:** Return `{ failures: [...] }` in response.
 
 ---
 
@@ -56,3 +157,22 @@ Already addressed by C2 fix.
 - [x] H3 — Proper `db.close()` Promise in `createDatabase` and `initializeDefaultDatabase`
 - [x] M1 — `which pre-commit` guard before config write/install
 - [x] M2 — Active `console.error`/`console.warn` in all catch blocks
+- [ ] LK1 — Connection map LRU eviction
+- [ ] LK2 — Row limit in `query()`
+- [ ] LK3 — Stream imports
+- [ ] LK4 — Array-join CSV export
+- [ ] V1 — ORDER BY sanitization
+- [ ] V2 — Zod validation in request handlers
+- [ ] M3 — `execFile` instead of `execAsync` for find
+- [ ] M4 — Stream find output
+- [ ] M5 — Escape ATTACH filename
+- [ ] M6 — execSync timeout
+- [ ] M7 — Shutdown debounce + timeout
+- [ ] M8 — AbortController for pre-commit
+- [ ] M9 — Try-catch JSON.parse on DB rows
+- [ ] M10 — `??` instead of `||` in CSV
+- [ ] M11 — Stream SQL import
+- [ ] M12 — Cap scattered DB merge
+- [ ] L3 — deleteEntity transaction
+- [ ] L4 — Dedup signal handlers
+- [ ] L5 — Partial failure reporting
