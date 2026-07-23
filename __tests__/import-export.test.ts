@@ -1,6 +1,6 @@
 import { ImportExportManager } from '../src/import-export';
 import { SQLiteManager } from '../src/sqlite-manager';
-import { writeFileSync, existsSync, unlinkSync, rmdirSync } from 'fs';
+import { writeFileSync, readFileSync, existsSync, unlinkSync, rmdirSync, readdirSync } from 'fs';
 import { join } from 'path';
 
 describe('ImportExportManager', () => {
@@ -29,7 +29,7 @@ describe('ImportExportManager', () => {
   afterEach(async () => {
     await sqliteManager.closeAllConnections();
     // Clean up test files
-    const testFiles = ['./test.csv', './test.json', './test.sql', './export.csv', './export.json'];
+    const testFiles = ['./test.csv', './test.json', './test.sql', './export.csv', './export.json', './export.sql'];
     for (const file of testFiles) {
       if (existsSync(file)) {
         unlinkSync(file);
@@ -38,8 +38,7 @@ describe('ImportExportManager', () => {
     // Clean up test database directory
     try {
       if (existsSync(testDbPath)) {
-        const fs = require('fs');
-        const files = fs.readdirSync(testDbPath);
+        const files = readdirSync(testDbPath);
         for (const file of files) {
           if (file.endsWith('.db')) {
             unlinkSync(join(testDbPath, file));
@@ -219,7 +218,7 @@ INSERT INTO users (id, name, email, age) VALUES (2, 'Jane Smith', 'jane@example.
       expect(result.data.exportedCount).toBe(2);
       expect(existsSync('./export.csv')).toBe(true);
 
-      const content = require('fs').readFileSync('./export.csv', 'utf8');
+      const content = readFileSync('./export.csv', 'utf8');
       expect(content).toContain('id,name,email,age');
       expect(content).toContain('John Doe');
     });
@@ -237,7 +236,7 @@ INSERT INTO users (id, name, email, age) VALUES (2, 'Jane Smith', 'jane@example.
       expect(result.success).toBe(true);
       expect(result.data.exportedCount).toBe(2);
 
-      const content = require('fs').readFileSync('./export.csv', 'utf8');
+      const content = readFileSync('./export.csv', 'utf8');
       expect(content).not.toContain('id,name,email,age');
       expect(content).toContain('John Doe');
     });
@@ -255,7 +254,7 @@ INSERT INTO users (id, name, email, age) VALUES (2, 'Jane Smith', 'jane@example.
       expect(result.success).toBe(true);
       expect(result.data.exportedCount).toBe(2);
 
-      const content = require('fs').readFileSync('./export.csv', 'utf8');
+      const content = readFileSync('./export.csv', 'utf8');
       expect(content).toContain('id;name;email;age');
     });
   });
@@ -281,7 +280,7 @@ INSERT INTO users (id, name, email, age) VALUES (2, 'Jane Smith', 'jane@example.
       expect(result.data.exportedCount).toBe(2);
       expect(existsSync('./export.json')).toBe(true);
 
-      const content = require('fs').readFileSync('./export.json', 'utf8');
+      const content = readFileSync('./export.json', 'utf8');
       const data = JSON.parse(content);
       expect(data).toHaveLength(2);
       expect(data[0].name).toBe('John Doe');
@@ -309,7 +308,7 @@ INSERT INTO users (id, name, email, age) VALUES (2, 'Jane Smith', 'jane@example.
       expect(result.data.exportedCount).toBe(2);
       expect(existsSync('./export.sql')).toBe(true);
 
-      const content = require('fs').readFileSync('./export.sql', 'utf8');
+      const content = readFileSync('./export.sql', 'utf8');
       expect(content).toContain('INSERT INTO users');
       expect(content).toContain('John Doe');
     });

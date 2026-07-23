@@ -1,6 +1,6 @@
 import sqlite3 from 'sqlite3';
 import { promisify } from 'util';
-import { readFileSync, writeFileSync, existsSync, statSync, mkdirSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, statSync, mkdirSync, openSync, closeSync } from 'fs';
 import { join } from 'path';
 import { 
   DatabaseInfo, 
@@ -29,14 +29,11 @@ export class SQLiteManager {
     }
   }
 
-  private async initializeDefaultDatabase(): Promise<void> {
+  private initializeDefaultDatabase(): void {
     try {
       const dbPath = this.getDatabasePath(this.defaultDatabaseName);
       if (!existsSync(dbPath)) {
-        const db = new sqlite3.Database(dbPath);
-        await new Promise<void>((resolve, reject) => {
-          db.close((err) => (err ? reject(err) : resolve()));
-        });
+        closeSync(openSync(dbPath, 'a'));
       }
     } catch (error) {
       console.error('Failed to initialize default database:', error);

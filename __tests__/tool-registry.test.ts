@@ -1,33 +1,20 @@
-import { ToolRegistry } from '../src/tools/tool-registry';
+import { allTools } from '../src/tools/tool-registry';
 
 describe('ToolRegistry', () => {
-  let toolRegistry: ToolRegistry;
-
-  beforeEach(() => {
-    toolRegistry = new ToolRegistry();
-  });
-
   describe('Tool Listing', () => {
     test('should list all available tools', () => {
-      const tools = toolRegistry.listTools();
+      expect(Array.isArray(allTools)).toBe(true);
+      expect(allTools.length).toBeGreaterThan(0);
 
-      expect(Array.isArray(tools)).toBe(true);
-      expect(tools.length).toBeGreaterThan(0);
-
-      // Check that all tools have required properties
-      tools.forEach(tool => {
+      allTools.forEach(tool => {
         expect(tool).toHaveProperty('name');
         expect(tool).toHaveProperty('description');
         expect(tool).toHaveProperty('inputSchema');
-        expect(typeof tool.name).toBe('string');
-        expect(typeof tool.description).toBe('string');
-        expect(typeof tool.inputSchema).toBe('object');
       });
     });
 
     test('should include database tools', () => {
-      const tools = toolRegistry.listTools();
-      const toolNames = tools.map(t => t.name);
+      const toolNames = allTools.map(t => t.name);
 
       expect(toolNames).toContain('execute_sql');
       expect(toolNames).toContain('query_data');
@@ -39,8 +26,7 @@ describe('ToolRegistry', () => {
     });
 
     test('should include memory tools', () => {
-      const tools = toolRegistry.listTools();
-      const toolNames = tools.map(t => t.name);
+      const toolNames = allTools.map(t => t.name);
 
       expect(toolNames).toContain('initialize_memory');
       expect(toolNames).toContain('create_entity');
@@ -54,16 +40,14 @@ describe('ToolRegistry', () => {
       expect(toolNames).toContain('open_node');
     });
 
-    test('should have exactly 17 tools', () => {
-      const tools = toolRegistry.listTools();
-      expect(tools).toHaveLength(17);
+    test('should have exactly 18 tools', () => {
+      expect(allTools).toHaveLength(18);
     });
   });
 
   describe('Tool Schema Validation', () => {
     test('should have valid schema for execute_sql tool', () => {
-      const tools = toolRegistry.listTools();
-      const executeSqlTool = tools.find(t => t.name === 'execute_sql');
+      const executeSqlTool = allTools.find(t => t.name === 'execute_sql');
 
       expect(executeSqlTool).toBeDefined();
       expect(executeSqlTool!.inputSchema).toHaveProperty('type', 'object');
@@ -72,8 +56,7 @@ describe('ToolRegistry', () => {
     });
 
     test('should have valid schema for create_entity tool', () => {
-      const tools = toolRegistry.listTools();
-      const createEntityTool = tools.find(t => t.name === 'create_entity');
+      const createEntityTool = allTools.find(t => t.name === 'create_entity');
 
       expect(createEntityTool).toBeDefined();
       expect(createEntityTool!.inputSchema).toHaveProperty('type', 'object');

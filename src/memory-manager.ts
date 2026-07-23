@@ -19,6 +19,7 @@ export class MemoryManager {
 
   async initializeMemoryDatabase(): Promise<void> {
     // Note: Database will be created automatically when first accessed
+    const manageProjectFiles = process.env.NODE_ENV !== 'test';
     
     let targetRoot = process.cwd();
     try {
@@ -29,7 +30,7 @@ export class MemoryManager {
     }
 
     // Pre-commit hook initialization — only in git repos with pre-commit installed
-    try {
+    if (manageProjectFiles) try {
       await execAsync('which pre-commit', { cwd: targetRoot });
     } catch {
       // pre-commit not installed, skip
@@ -123,7 +124,7 @@ export class MemoryManager {
     }
 
     // Gitignore initialization
-    try {
+    if (manageProjectFiles) try {
       const gitignorePath = path.join(targetRoot, '.gitignore');
       if (fs.existsSync(gitignorePath)) {
         const gitignoreContent = fs.readFileSync(gitignorePath, 'utf8');
@@ -188,7 +189,7 @@ export class MemoryManager {
     }
 
     // Scattered DB consolidation — skip for home dir (too expensive)
-    if (targetRoot !== (process.env.HOME || '')) {
+    if (manageProjectFiles && targetRoot !== (process.env.HOME || '')) {
       const rootDbPath = path.join(targetRoot, 'memory.db');
       let mergeCount = 0;
       const MAX_MERGE = 100;

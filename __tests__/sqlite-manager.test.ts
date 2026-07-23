@@ -1,6 +1,6 @@
 import { SQLiteManager } from '../src/sqlite-manager';
 import { existsSync, unlinkSync, rmdirSync, readdirSync } from 'fs';
-import { join, resolve } from 'path';
+import { join } from 'path';
 
 describe('SQLiteManager', () => {
   let sqliteManager: SQLiteManager;
@@ -17,8 +17,7 @@ describe('SQLiteManager', () => {
     // Clean up test databases
     try {
       if (existsSync(testDbPath)) {
-        const fs = require('fs');
-        const files = fs.readdirSync(testDbPath);
+        const files = readdirSync(testDbPath);
         for (const file of files) {
           if (file.endsWith('.db')) {
             unlinkSync(join(testDbPath, file));
