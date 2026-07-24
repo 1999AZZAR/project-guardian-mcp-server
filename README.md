@@ -47,6 +47,8 @@ A Model Context Protocol (MCP) server for persistent project memory, knowledge-g
 - **Optional Pre-Commit Setup**: Installs a generated configuration only when both Git and `pre-commit` are available
 
 ### Streamlined Database Operations
+
+![Blotcat efficiently sorting raw data blocks on a conveyor belt into the structured memory.db SQLite wall](assets/blotcat-db-ops.jpg)
 - **Single Database**: Uses only `memory.db` for all operations
 - **Core CRUD**: Essential database operations (query, insert, update, delete)
 - **SQL Execution**: Direct SQL query execution
@@ -54,6 +56,8 @@ A Model Context Protocol (MCP) server for persistent project memory, knowledge-g
 - **27 Tools Total**: Seven database tools, ten memory tools, one guidance tool, and nine runtime companion tools
 
 ### Runtime Companion Integration
+
+![Blotcat acting as a conductor for miniature sub-Blotcats acting as security, memory, and tracker companions](assets/blotcat-companions.jpg)
 
 The repository includes six `guardian-*` AgentSkills and exposes their operational capabilities through typed MCP tools:
 
@@ -69,6 +73,8 @@ The repository includes six `guardian-*` AgentSkills and exposes their operation
 AgentSkills provide host-side workflows and instructions. The MCP runtime implements the corresponding operations directly in TypeScript, except container scanning, which invokes Trivy as a bounded external process. No generic script or shell execution tool is exposed.
 
 ### AI Guidance System
+
+![Blotcat as an academic master pointing at a glowing scroll of strict rules and project prompts](assets/blotcat-ai-guidance.jpg)
 - **11 Resources**: Templates, best practices, project status, and companion capability health
 - **27 Prompts**: Comprehensive pre-built workflows for all aspects of project management
 - **Expert Guidance**: Step-by-step instructions for complex operations
