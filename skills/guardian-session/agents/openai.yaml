@@ -1,11 +1,4 @@
-name: guardian-session
-version: 1.0.0
-description: Session context loader for Project-Guardian memory.db
-author: 1999AZZAR
-license: MIT
-tags:
-  - session
-  - context
-  - memory
-  - continuity
-category: development
+interface:
+  display_name: "Guardian Session"
+  short_description: "Restore relevant context from Project Guardian memory."
+  default_prompt: "Load the relevant project context and identify the next actionable task."

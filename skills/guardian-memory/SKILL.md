@@ -1,36 +1,29 @@
 ---
-name: project-guardian
-description: "Core project memory and knowledge graph skill. Use Project-Guardian MCP tools to track entities, relations, and observations for ALL project work. Load on every session that involves code, tasks, or project management. Ensures every decision, change, and milestone is recorded in memory.db."
+name: guardian-memory
+description: "Maintain project context in Project Guardian's memory.db knowledge graph. Use during coding, debugging, planning, and project-management sessions to restore relevant context and record significant decisions, changes, tasks, and milestones."
 ---
 
-# Project Guardian — Core Skill
+# Guardian Memory
 
 ## Purpose
 
 Every project interaction creates knowledge. This skill ensures nothing is lost. Use Project-Guardian MCP tools to maintain a living knowledge graph of your project in `memory.db`.
 
-## Activation Hook (MANDATORY)
+## Safety
 
-**You MUST ALWAYS activate and use Project-Guardian as a default capability** for ANY interaction involving code, planning, or project management. 
-- ALWAYS call `initialize_memory` at the very start of your session if working in a new or existing repository to enforce pre-commit hooks and project tracking.
-- All operations must be contextualized and tracked in the knowledge graph.
-
-## When to Load
-
-- Every coding session
-- Every project management session
-- Every debugging session
-- Every architecture/design discussion
+- Never store credentials, tokens, private keys, or sensitive personal data in observations.
+- Ask before any operation that installs hooks, modifies repository files, consolidates databases, or deletes source databases.
+- Record significant work only; skip trivial reads, formatting, and transient details.
 
 ## Quick Start
 
-### 1. Initialize Project (First Use)
+### 1. Initialize Project (First Use Only)
 
 ```
 initialize_memory
 ```
 
-*(Note: This automatically locates your Git root, centralizes `memory.db` there, **auto-combines any scattered `memory.db` files found in subdirectories**, and dynamically enforces standard pre-commit hooks based on your project type)*
+`initialize_memory` may modify repository configuration, install hooks, and consolidate databases. Explain the effects and get user approval before calling it.
 
 Then create the project root entity:
 
@@ -47,17 +40,13 @@ create_entity entities=[{
 
 ### 2. On Every Session Start
 
-Read the current graph state:
-
-```
-read_graph
-```
-
-Search for entities related to current work:
+Search for entities related to the current project, directory, file, or topic:
 
 ```
 search_nodes query="<file-or-topic>"
 ```
+
+Use `open_node` for exact entities. Use `read_graph` only when the graph is known to be small or the user explicitly requests a complete view.
 
 ### 3. During Work — Track Everything
 
@@ -71,6 +60,8 @@ add_observation observations=[{
 ```
 
 ## Entity Naming Schema
+
+See `references/entity-schema.md` for detailed examples.
 
 | Type | Pattern | Example |
 |------|---------|---------|
@@ -87,6 +78,8 @@ add_observation observations=[{
 | `risk` | `risk:<slug>` | `risk:data-loss` |
 
 ## Relation Schema
+
+See `references/relation-schema.md` for detailed examples and query guidance.
 
 | Relation | Meaning | Example |
 |----------|---------|---------|
@@ -148,7 +141,7 @@ Use these prefixes for consistent, queryable observations:
 - Use `search_nodes` before creating to avoid duplicates
 - Use `open_node` to check if entity exists before creating
 - Keep observations concise — one line per observation
-- Use `query_data` for complex SQL when `search_nodes` isn't enough
+- Use `query_data` for structured table filtering, ordering, and pagination when `search_nodes` is insufficient
 
 ## Integration with Other Skills
 

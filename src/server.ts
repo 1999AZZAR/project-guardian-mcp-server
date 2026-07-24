@@ -11,8 +11,8 @@ import {
 import { SQLiteManager } from './sqlite-manager.js';
 import { ImportExportManager } from './import-export.js';
 import { MemoryManager } from './memory-manager.js';
-import { execSync } from 'child_process';
-import { join } from 'path';
+import { execFileSync } from 'child_process';
+import { join, resolve } from 'path';
 import { homedir } from 'os';
 
 // Modular imports
@@ -23,6 +23,8 @@ import { projectGuardianPrompts } from './prompts/prompt-registry.js';
 import { PromptHandlers } from './prompts/prompt-registry.js';
 import { RequestHandlers } from './handlers/request-handlers.js';
 import { BEHAVIORAL_PROTOCOL_SYSTEM_MESSAGE } from './prompts/behavioral-protocol.js';
+import { RuntimeCapabilities } from './runtime/runtime-capabilities.js';
+import { PathGuard } from './runtime/path-guard.js';
 
 export class DatabaseMCPServer {
   private server: Server;
@@ -32,14 +34,17 @@ export class DatabaseMCPServer {
   private resourceHandlers: ResourceHandlers;
   private promptHandlers: PromptHandlers;
   private requestHandlers: RequestHandlers;
+  private runtimeCapabilities: RuntimeCapabilities;
 
   constructor() {
     // Determine the git root or fallback to cwd for the database
     let dbPath: string;
+    let workspaceRoot = resolve(process.cwd());
     try {
-      const output = execSync('git rev-parse --show-toplevel 2>/dev/null', { encoding: 'utf-8', timeout: 5000 }).trim();
+      const output = execFileSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf-8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'] }).trim();
       if (!output) throw new Error();
       dbPath = output;
+      workspaceRoot = resolve(output);
     } catch {
       const dataHome = process.env.XDG_DATA_HOME || join(homedir(), '.local', 'share');
       dbPath = join(dataHome, 'project-guardian');
@@ -49,6 +54,11 @@ export class DatabaseMCPServer {
     this.sqliteManager = new SQLiteManager(dbPath);
     this.importExportManager = new ImportExportManager(this.sqliteManager);
     this.memoryManager = new MemoryManager(this.sqliteManager);
+    this.runtimeCapabilities = new RuntimeCapabilities(
+      this.memoryManager,
+      this.sqliteManager,
+      new PathGuard(workspaceRoot)
+    );
 
     // Initialize modular handlers
     this.resourceHandlers = new ResourceHandlers(this.memoryManager, this.sqliteManager);
@@ -57,7 +67,8 @@ export class DatabaseMCPServer {
       this.sqliteManager, 
       this.memoryManager, 
       this.importExportManager,
-      this.promptHandlers
+      this.promptHandlers,
+      this.runtimeCapabilities
     );
 
     this.server = new Server(
@@ -218,7 +229,7 @@ export class DatabaseMCPServer {
 
     const shutdown = async () => {
       await Promise.race([
-        this.sqliteManager.closeAllConnections(),
+        Promise.allSettled([this.sqliteManager.closeAllConnections(), this.runtimeCapabilities.close()]),
         new Promise(resolve => setTimeout(resolve, 5000))
       ]);
       process.exit(0);

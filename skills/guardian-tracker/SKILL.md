@@ -27,12 +27,11 @@ Manually tracking every change is tedious. This skill automates it. After every 
    ```
    search_nodes query="file:<path>"
    ```
-3. Create or update file entity:
+3. Create a missing file entity with `create_entity`; update an existing one with `add_observation`:
    ```
-   create_entity entities=[{
-     "name": "file:<path>",
-     "entityType": "file",
-     "observations": ["[<timestamp>] action: edit | changes: <summary> | lines: +/-<count>"]
+    add_observation observations=[{
+      "entityName": "file:<path>",
+      "contents": ["[<timestamp>] action: edit | changes: <summary> | lines: +/-<count>"]
    }]
    ```
 4. Link to relevant features/tasks:
@@ -46,7 +45,7 @@ Manually tracking every change is tedious. This skill automates it. After every 
 
 ### After Git Commit
 
-1. Run `git diff HEAD~1 --stat` to see changed files
+1. Run the bundled tracker to obtain machine-readable changed and untracked paths
 2. Create/update entities for each changed file
 3. Create a task observation for the commit:
    ```
@@ -119,10 +118,10 @@ Manually tracking every change is tedious. This skill automates it. After every 
 Use `scripts/track_changes.py` for automated git diff analysis:
 
 ```bash
-python3 scripts/track_changes.py [--commit <hash>] [--since <time>]
+python3 $WORKSPACE/skills/guardian-tracker/scripts/track_changes.py [--commit <hash>] [--since <time>]
 ```
 
-Output: JSON array of changed files with diffs, ready for entity creation.
+Output: JSON containing exact changed paths and status summaries, ready for entity creation or observation updates.
 
 ## Batch Tracking
 
@@ -162,5 +161,6 @@ Use consistent prefixes for machine-parseable observations:
 - Don't create entities for trivial changes (typo fixes, whitespace)
 - Don't duplicate observations — check existing ones first
 - Don't create relations that already exist
+- Don't store credentials, sensitive filenames, author identities, or private commit-message content in memory
 - Keep observations under 200 chars each
 - Use batch operations for multiple related changes

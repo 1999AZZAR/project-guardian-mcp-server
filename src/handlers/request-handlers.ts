@@ -1,4 +1,3 @@
-import { CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { SQLiteManager } from '../sqlite-manager.js';
 import { MemoryManager } from '../memory-manager.js';
 import { ImportExportManager } from '../import-export.js';
@@ -11,6 +10,11 @@ import {
   DeleteEntitiesSchema, DeleteObservationsSchema, DeleteRelationsSchema,
   SearchNodesSchema, OpenNodesSchema
 } from '../types.js';
+import {
+  AnalyzeGitChangesSchema, CacheDeleteSchema, CacheGetSchema, CacheScanSchema, CacheSetSchema,
+  GetSessionContextSchema, InspectUntrustedTextSchema, ScanContainerImageSchema, ScanProjectSecretsSchema,
+} from '../types.js';
+import { RuntimeCapabilities } from '../runtime/runtime-capabilities.js';
 
 const toolSchemas: Record<string, z.ZodSchema> = {
   execute_sql: ExecuteSqlSchema.omit({ database: true }),
@@ -28,14 +32,30 @@ const toolSchemas: Record<string, z.ZodSchema> = {
   delete_relation: DeleteRelationsSchema,
   search_nodes: SearchNodesSchema,
   open_node: OpenNodesSchema,
+  get_session_context: GetSessionContextSchema,
+  analyze_git_changes: AnalyzeGitChangesSchema,
+  inspect_untrusted_text: InspectUntrustedTextSchema,
+  scan_project_secrets: ScanProjectSecretsSchema,
+  scan_container_image: ScanContainerImageSchema,
+  cache_get: CacheGetSchema,
+  cache_set: CacheSetSchema,
+  cache_delete: CacheDeleteSchema,
+  cache_scan: CacheScanSchema,
 };
+
+const runtimeToolNames = new Set([
+  'get_session_context', 'analyze_git_changes', 'inspect_untrusted_text',
+  'scan_project_secrets', 'scan_container_image', 'cache_get', 'cache_set',
+  'cache_delete', 'cache_scan',
+]);
 
 export class RequestHandlers {
   constructor(
     private sqliteManager: SQLiteManager,
     private memoryManager: MemoryManager,
     private importExportManager: ImportExportManager,
-    private promptHandlers: PromptHandlers
+    private promptHandlers: PromptHandlers,
+    private runtimeCapabilities?: RuntimeCapabilities
   ) {}
 
   async handleToolCall(name: string, args: any): Promise<any> {
@@ -65,9 +85,29 @@ export class RequestHandlers {
         };
       }
 
+      if (runtimeToolNames.has(name)) {
+        if (!this.runtimeCapabilities) throw new Error('Runtime companions are unavailable');
+        return { success: true, data: await this.handleRuntimeTool(name, args) };
+      }
+
       throw new Error(`Unknown tool: ${name}`);
     } catch (error) {
       throw new Error(`Tool execution failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  private async handleRuntimeTool(name: string, args: any): Promise<unknown> {
+    switch (name) {
+      case 'get_session_context': return this.runtimeCapabilities!.getSessionContext(args);
+      case 'analyze_git_changes': return this.runtimeCapabilities!.analyzeGitChanges(args);
+      case 'inspect_untrusted_text': return this.runtimeCapabilities!.inspectUntrustedText(args);
+      case 'scan_project_secrets': return this.runtimeCapabilities!.scanProjectSecrets(args);
+      case 'scan_container_image': return this.runtimeCapabilities!.scanContainerImage(args);
+      case 'cache_get': return this.runtimeCapabilities!.cacheGet(args);
+      case 'cache_set': return this.runtimeCapabilities!.cacheSet(args);
+      case 'cache_delete': return this.runtimeCapabilities!.cacheDelete(args);
+      case 'cache_scan': return this.runtimeCapabilities!.cacheScan(args);
+      default: throw new Error(`Unknown runtime tool: ${name}`);
     }
   }
 
@@ -123,7 +163,7 @@ export class RequestHandlers {
         await this.memoryManager.initializeMemoryDatabase();
         return { success: true, message: 'Memory system initialized successfully' };
 
-      case 'create_entity':
+      case 'create_entity': {
         const entities = await this.memoryManager.createEntities(args.entities);
         const failedEntities = args.entities.length - entities.length;
         return {
@@ -132,8 +172,9 @@ export class RequestHandlers {
             ? `Created ${entities.length}/${args.entities.length} entities (${failedEntities} failed)`
             : `Created ${entities.length} entities`
         };
+      }
 
-      case 'create_relation':
+      case 'create_relation': {
         const relations = await this.memoryManager.createRelations(args.relations);
         const failedRelations = args.relations.length - relations.length;
         return {
@@ -142,8 +183,9 @@ export class RequestHandlers {
             ? `Created ${relations.length}/${args.relations.length} relations (${failedRelations} failed)`
             : `Created ${relations.length} relations`
         };
+      }
 
-      case 'add_observation':
+      case 'add_observation': {
         const obsResults = await this.memoryManager.addObservations(args.observations);
         const failedObs = args.observations.length - obsResults.length;
         return {
@@ -152,12 +194,13 @@ export class RequestHandlers {
             ? `Added observations to ${obsResults.length}/${args.observations.length} entities (${failedObs} failed)`
             : `Added observations to ${args.observations.length} entities`
         };
+      }
 
       case 'delete_entity':
         await this.memoryManager.deleteEntities(args.entityNames);
         return { success: true, message: `Deleted ${args.entityNames.length} entities` };
 
-      case 'delete_observation':
+      case 'delete_observation': {
         const delResults = await this.memoryManager.deleteObservations(args.deletions);
         const failedDel = args.deletions.length - delResults.length;
         return {
@@ -166,22 +209,26 @@ export class RequestHandlers {
             ? `Deleted observations from ${delResults.length}/${args.deletions.length} entities (${failedDel} failed)`
             : `Deleted observations from ${args.deletions.length} entities`
         };
+      }
 
       case 'delete_relation':
         await this.memoryManager.deleteRelations(args.relations);
         return { success: true, message: `Deleted ${args.relations.length} relations` };
 
-      case 'read_graph':
+      case 'read_graph': {
         const graph = await this.memoryManager.readGraph();
         return { success: true, data: graph };
+      }
 
-      case 'search_nodes':
+      case 'search_nodes': {
         const searchResult = await this.memoryManager.searchNodes(args.query);
         return { success: true, data: searchResult };
+      }
 
-      case 'open_node':
+      case 'open_node': {
         const entitiesDetails = await this.memoryManager.openNodes(args.names);
         return { success: true, data: entitiesDetails };
+      }
     }
   }
 }

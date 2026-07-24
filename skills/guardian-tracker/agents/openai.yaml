@@ -1,11 +1,4 @@
-name: guardian-tracker
-version: 1.0.0
-description: Auto-tracking skill for Project-Guardian memory.db
-author: 1999AZZAR
-license: MIT
-tags:
-  - tracking
-  - automation
-  - git
-  - file-changes
-category: development
+interface:
+  display_name: "Guardian Tracker"
+  short_description: "Summarize significant Git changes for project memory."
+  default_prompt: "Track these significant changes in Project Guardian without storing sensitive data."

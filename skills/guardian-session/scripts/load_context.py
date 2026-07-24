@@ -12,18 +12,20 @@ import json
 import os
 import sqlite3
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timezone
 
 
 def find_memory_db(start_dir: str = ".") -> str | None:
     """Walk up directories to find memory.db."""
     current = os.path.abspath(start_dir)
-    while current != "/":
+    while True:
         db_path = os.path.join(current, "memory.db")
         if os.path.exists(db_path):
             return db_path
-        current = os.path.dirname(current)
-    return None
+        parent = os.path.dirname(current)
+        if parent == current:
+            return None
+        current = parent
 
 
 def connect_db(db_path: str) -> sqlite3.Connection:
@@ -68,9 +70,10 @@ def search_entities(conn: sqlite3.Connection, query: str) -> list[dict]:
 
 def parse_observations(obs_json: str) -> list[str]:
     try:
-        return json.loads(obs_json)
+        observations = json.loads(obs_json)
     except (json.JSONDecodeError, TypeError):
         return []
+    return observations if isinstance(observations, list) and all(isinstance(item, str) for item in observations) else []
 
 
 def get_latest_observation(entity: dict) -> str:
@@ -78,10 +81,20 @@ def get_latest_observation(entity: dict) -> str:
     return obs[-1] if obs else ""
 
 
-def build_project_summary(conn: sqlite3.Connection, project_name: str | None) -> dict:
+def has_latest_status(observations: list[str], complete: tuple[str, ...], reopen: tuple[str, ...]) -> bool:
+    for observation in reversed(observations):
+        upper = observation.upper()
+        if any(marker in upper for marker in reopen):
+            return False
+        if any(marker in upper for marker in complete):
+            return True
+    return False
+
+
+def build_project_summary(conn: sqlite3.Connection) -> dict:
     summary = {
-        "timestamp": datetime.utcnow().isoformat() + "Z",
-        "project": project_name,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "project": None,
         "stats": {},
         "active_tasks": [],
         "open_bugs": [],
@@ -116,18 +129,26 @@ def build_project_summary(conn: sqlite3.Connection, project_name: str | None) ->
         }
 
         if e["entity_type"] == "task":
-            is_complete = any("[COMPLETE]" in o or "[DONE]" in o.upper() for o in obs)
+            is_complete = has_latest_status(obs, ("[COMPLETE]", "[DONE]"), ("[REOPEN]", "[IN PROGRESS]"))
             if not is_complete:
                 summary["active_tasks"].append(entry)
 
         elif e["entity_type"] == "bug":
-            is_fixed = any("[FIX]" in o or "[RESOLVED]" in o.upper() for o in obs)
+            is_fixed = has_latest_status(obs, ("[FIX]", "[RESOLVED]"), ("[REOPEN]", "[REGRESSION]"))
             if not is_fixed:
                 summary["open_bugs"].append(entry)
 
         summary["entities"].append(entry)
 
-    summary["recent_changes"] = get_recent_entities(conn, 10)
+    summary["recent_changes"] = [
+        {
+            "name": entity["name"],
+            "type": entity["entity_type"],
+            "updated": entity.get("updated_at", ""),
+            "latest_observation": get_latest_observation(entity),
+        }
+        for entity in get_recent_entities(conn, 10)
+    ]
     summary["relations"] = all_relations[:20]
 
     blocked = []
@@ -191,7 +212,6 @@ def format_text_output(data: dict) -> str:
 def main():
     parser = argparse.ArgumentParser(description="Load project context from memory.db")
     parser.add_argument("--dir", "-d", default=".", help="Working directory to search from")
-    parser.add_argument("--project", "-p", help="Project name to filter by")
     parser.add_argument("--format", "-f", choices=["json", "text"], default="json")
     args = parser.parse_args()
 
@@ -201,7 +221,7 @@ def main():
         sys.exit(1)
 
     conn = connect_db(db_path)
-    summary = build_project_summary(conn, args.project)
+    summary = build_project_summary(conn)
     conn.close()
 
     if args.format == "json":

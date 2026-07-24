@@ -1,6 +1,6 @@
 ---
 name: guardian-session
-description: "Session context loader for Project-Guardian. Restores project context from memory.db at session start. Surfaces relevant entities, recent observations, and active tasks based on current working directory and files. Load at the beginning of every coding session."
+description: "Restore relevant Project Guardian context from memory.db at session start. Use when resuming project work, switching repositories, or answering what was previously in progress; surface active tasks, open bugs, recent observations, and blockers."
 ---
 
 # Guardian Session — Context Loader
@@ -20,12 +20,12 @@ Each session starts fresh. This skill restores context from `memory.db` so you k
 
 ### 1. Load Project State
 
-Read the full knowledge graph:
+Search for the current project or topic first:
 ```
-read_graph
+search_nodes query="<project-or-topic>"
 ```
 
-This returns all entities and relations. Scan for:
+Use `read_graph` only when the graph is known to be small or a full view is explicitly needed. Scan for:
 - Project entities (root nodes)
 - Active tasks (not marked `[COMPLETE]`)
 - Open bugs (not marked `[FIX]`)
@@ -91,7 +91,7 @@ Provide a concise briefing:
 Use `scripts/load_context.py` for automated context extraction:
 
 ```bash
-python3 scripts/load_context.py [--dir <path>] [--project <name>]
+python3 $WORKSPACE/skills/guardian-session/scripts/load_context.py [--dir <path>]
 ```
 
 Output: JSON with project summary, active tasks, recent changes, and suggested next actions.
@@ -129,29 +129,6 @@ Find what changed recently:
 query_data table="entities" orderBy="updated_at" orderDirection="DESC" limit=5
 ```
 
-## Session State Tracking
-
-At session start, optionally create a session entity:
-```
-create_entity entities=[{
-  "name": "session:<date>:<time>",
-  "entityType": "milestone",
-  "observations": [
-    "[SESSION] started | working-dir: <dir> | focus: <what I'm working on>"
-  ]
-}]
-```
-
-At session end, update it:
-```
-add_observation observations=[{
-  "entityName": "session:<date>:<time>",
-  "contents": [
-    "[SESSION] ended | duration: <time> | completed: <list> | next: <list>"
-  ]
-}]
-```
-
 ## Dependency Chain Analysis
 
 To find what to work on next, trace dependency chains:
@@ -168,5 +145,5 @@ To find what to work on next, trace dependency chains:
 
 - Don't load the entire graph if only working on a subset
 - Don't create session entities for very short interactions (< 5 min)
-- Don't surface stale observations (older than 7 days) unless specifically asked
+- Prefer recent observations; include older ones only when they remain active or relevant
 - Keep session summaries under 10 lines

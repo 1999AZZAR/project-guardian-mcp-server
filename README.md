@@ -1,6 +1,6 @@
 # Project Guardian MCP
 
-A Model Context Protocol (MCP) server for persistent project memory, knowledge-graph operations, SQLite data access, and guided project-management workflows. The current registry exposes 18 tools, 10 resources, and 27 prompts.
+A Model Context Protocol (MCP) server for persistent project memory, knowledge-graph operations, SQLite data access, runtime security checks, and guided project-management workflows. The current registry exposes 27 tools, 11 resources, and 27 prompts.
 
 ![Blotcat — guardian on duty, wiring the knowledge graph from memory.db](assets/blotcat-hero.jpg)
 
@@ -17,6 +17,7 @@ A Model Context Protocol (MCP) server for persistent project memory, knowledge-g
 - [Available Tools](#available-tools)
   - [Database Operations (7 tools)](#database-operations-7-tools)
   - [Memory and Guidance Tools (11 tools)](#memory-and-guidance-tools-11-tools)
+  - [Runtime Companion Tools (9 tools)](#runtime-companion-tools-9-tools)
 - [AI Guidance System](#ai-guidance-system)
   - [Available Resources](#available-resources)
   - [Available Prompts](#available-prompts)
@@ -48,10 +49,10 @@ A Model Context Protocol (MCP) server for persistent project memory, knowledge-g
 - **Core CRUD**: Essential database operations (query, insert, update, delete)
 - **SQL Execution**: Direct SQL query execution
 - **Data Transfer**: Import/export CSV and JSON files
-- **18 Tools Total**: Seven database tools, ten memory tools, and one guidance tool
+- **27 Tools Total**: Seven database tools, ten memory tools, one guidance tool, and nine runtime companion tools
 
 ### AI Guidance System
-- **10 Resources**: Templates, best practices, cached data, and comprehensive project status
+- **11 Resources**: Templates, best practices, project status, and companion capability health
 - **27 Prompts**: Comprehensive pre-built workflows for all aspects of project management
 - **Expert Guidance**: Step-by-step instructions for complex operations
 - **Contextual Help**: Adaptive prompts based on user needs
@@ -69,13 +70,15 @@ A Model Context Protocol (MCP) server for persistent project memory, knowledge-g
 - **Input Validation**: Zod schema validation for all parameters
 - **Error Recovery**: Graceful error handling with detailed error messages
 - **Resource Management**: Automatic cleanup of connections and resources
-- **Testing**: Seven Jest suites with 73 passing tests
+- **Testing**: Eight Jest suites with 83 passing tests
 
 ## Requirements
 
 - **Node.js**: >= 18.0.0
 - **npm**: Latest stable version
 - **SQLite3**: Automatically installed as dependency
+- **Redis**: Optional; required only for `cache_*` tools through `REDIS_URL`
+- **Trivy**: Optional; required only for `scan_container_image`
 
 ## Installation
 
@@ -124,7 +127,7 @@ When you pull new updates or modify the code, you must rebuild the server and re
 
 ## Available Tools
 
-This MCP server currently provides **18 tools**:
+This MCP server currently provides **27 tools**:
 
 ### Database Operations (7 tools)
 
@@ -267,13 +270,27 @@ Invoke a project guidance framework to receive specialized instructions and chec
 - `guidance_name` (required): Name of the guidance (e.g., project-setup, sprint-planning)
 - `arguments` (optional): Arguments required by the specific guidance framework
 
+### Runtime Companion Tools (9 tools)
+
+- `get_session_context`: Summarize active tasks, open bugs, recent changes, and blockers.
+- `analyze_git_changes`: Return bounded changed and untracked Git paths.
+- `inspect_untrusted_text`: Normalize untrusted text and flag prompt-injection indicators.
+- `scan_project_secrets`: Scan a workspace-relative path without returning secret values.
+- `scan_container_image`: Run a bounded HIGH/CRITICAL Trivy image scan.
+- `cache_get`: Read a namespaced Redis value.
+- `cache_set`: Store a namespaced Redis value with an optional TTL.
+- `cache_delete`: Delete a namespaced Redis value.
+- `cache_scan`: Cursor-scan `mema:*` Redis keys.
+
+Project scan paths are restricted to the current Git workspace. Redis tools connect lazily and return an unavailable error when `REDIS_URL` is unset. Container scanning remains unavailable until Trivy is installed. Read `project-guardian://companions/catalog` for current capability health.
+
 ## AI Guidance System
 
 Project Guardian MCP includes comprehensive resources and prompts to help AI models effectively use the toolset for project management.
 
 ### Available Resources
 
-Project Guardian provides **10 key resources** that AI models can read to understand project management concepts, access cached data, and get comprehensive project insights:
+Project Guardian provides **11 key resources** that AI models can read to understand project management concepts, access capability health, and get comprehensive project insights:
 
 #### `project-guardian://templates/entity-types`
 Standard entity types for project management with examples and usage guidelines.

@@ -43,8 +43,8 @@ describe('ResourceRegistry', () => {
       });
     });
 
-    test('should have exactly 10 resources', () => {
-      expect(projectGuardianResources).toHaveLength(10);
+    test('should have exactly 11 resources', () => {
+      expect(projectGuardianResources).toHaveLength(11);
     });
 
     test('should include expected resource URIs', () => {
@@ -54,6 +54,7 @@ describe('ResourceRegistry', () => {
       expect(uris).toContain('project-guardian://templates/relationship-types');
       expect(uris).toContain('project-guardian://status/current-graph');
       expect(uris).toContain('project-guardian://metrics/project-stats');
+      expect(uris).toContain('project-guardian://companions/catalog');
     });
   });
 
@@ -92,6 +93,13 @@ describe('ResourceRegistry', () => {
       expect(result).toBeDefined();
       expect(typeof result).toBe('string');
       expect(result).toContain('statistics');
+    });
+
+    test('should read companion catalog', async () => {
+      const result = JSON.parse(await resourceHandlers.handleReadResource('project-guardian://companions/catalog'));
+      expect(result.companions).toHaveLength(6);
+      expect(result.companions.find((item: { id: string }) => item.id === 'guardian-security').tools)
+        .toContain('scan_project_secrets');
     });
 
     test('should handle non-existent resource', async () => {

@@ -40,8 +40,17 @@ describe('ToolRegistry', () => {
       expect(toolNames).toContain('open_node');
     });
 
-    test('should have exactly 18 tools', () => {
-      expect(allTools).toHaveLength(18);
+    test('should include runtime companion tools', () => {
+      const toolNames = allTools.map(t => t.name);
+      expect(toolNames).toEqual(expect.arrayContaining([
+        'get_session_context', 'analyze_git_changes', 'inspect_untrusted_text',
+        'scan_project_secrets', 'scan_container_image', 'cache_get', 'cache_set',
+        'cache_delete', 'cache_scan',
+      ]));
+    });
+
+    test('should have exactly 27 tools', () => {
+      expect(allTools).toHaveLength(27);
     });
   });
 

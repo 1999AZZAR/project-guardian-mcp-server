@@ -1,0 +1,4 @@
+interface:
+  display_name: "Guardian Memory"
+  short_description: "Restore and maintain structured project context."
+  default_prompt: "Restore the relevant project context and track significant work."

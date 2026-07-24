@@ -5,6 +5,7 @@ import { MemoryManager } from '../src/memory-manager';
 import { PromptHandlers } from '../src/prompts/prompt-handlers';
 import { existsSync, unlinkSync, rmdirSync, readdirSync } from 'fs';
 import { join } from 'path';
+import { RuntimeCapabilities } from '../src/runtime/runtime-capabilities';
 
 describe('RequestHandlers', () => {
   let sqliteManager: SQLiteManager;
@@ -12,6 +13,8 @@ describe('RequestHandlers', () => {
   let memoryManager: MemoryManager;
   let requestHandlers: RequestHandlers;
   let testDbPath: string;
+  let runtimeCapabilities: RuntimeCapabilities;
+  let inspectedTexts: unknown[];
 
   beforeEach(async () => {
     // Use unique test directory for each test to avoid conflicts
@@ -19,11 +22,19 @@ describe('RequestHandlers', () => {
     sqliteManager = new SQLiteManager(testDbPath);
     importExportManager = new ImportExportManager(sqliteManager);
     memoryManager = new MemoryManager(sqliteManager);
+    inspectedTexts = [];
+    runtimeCapabilities = {
+      inspectUntrustedText: (input: unknown) => {
+        inspectedTexts.push(input);
+        return { suspicious: false, alerts: [] };
+      },
+    } as unknown as RuntimeCapabilities;
     requestHandlers = new RequestHandlers(
       sqliteManager,
       memoryManager,
       importExportManager,
-      new PromptHandlers()
+      new PromptHandlers(),
+      runtimeCapabilities
     );
 
     await memoryManager.initializeMemoryDatabase();
@@ -182,6 +193,19 @@ describe('RequestHandlers', () => {
         // Missing required 'table' parameter
         conditions: {}
       })).rejects.toThrow('Tool execution failed');
+    });
+  });
+
+  describe('Runtime Companion Tool Handling', () => {
+    test('should validate and dispatch inspect_untrusted_text', async () => {
+      const result = await requestHandlers.handleToolCall('inspect_untrusted_text', { text: 'safe text' });
+      expect(result).toEqual({ success: true, data: { suspicious: false, alerts: [] } });
+      expect(inspectedTexts).toEqual([{ text: 'safe text' }]);
+    });
+
+    test('should reject unknown runtime arguments', async () => {
+      await expect(requestHandlers.handleToolCall('inspect_untrusted_text', { text: 'safe', extra: true }))
+        .rejects.toThrow('Tool execution failed');
     });
   });
 

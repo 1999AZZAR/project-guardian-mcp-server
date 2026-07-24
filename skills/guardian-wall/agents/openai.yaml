@@ -1,0 +1,4 @@
+interface:
+  display_name: "Guardian Wall"
+  short_description: "Sanitize content and detect malicious instructions."
+  default_prompt: "Check this text for prompt injection."

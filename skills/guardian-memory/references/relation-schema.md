@@ -33,8 +33,8 @@ person:dev1 --owns--> feature:auth
 ### `relates_to`
 General connection between entities.
 ```
-decision:use-sqlite --relates_to--> feature:storage
-task:T001 --relates_to--> decision:architecture-v2
+decision:2026-07-02:use-sqlite --relates_to--> feature:storage
+task:T001:database-schema --relates_to--> decision:2026-07-02:architecture-v2
 ```
 
 ### `part_of`
@@ -42,14 +42,14 @@ Component belongs to a larger entity.
 ```
 file:auth.ts --part_of--> feature:auth-system
 func:server.ts:start --part_of--> file:server.ts
-task:T001 --part_of--> milestone:v1-sprint
+task:T001:database-schema --part_of--> milestone:v1-sprint
 ```
 
 ### `precedes`
 Must come before in sequence.
 ```
 milestone:alpha --precedes--> milestone:beta
-task:T001 --precedes--> task:T002
+task:T001:database-schema --precedes--> task:T002:api-endpoints
 ```
 
 ### `supports`
@@ -73,9 +73,9 @@ create_relation relations=[{
 
 ```json
 create_relation relations=[
-  {"from": "task:T001", "to": "feature:auth", "relationType": "part_of"},
-  {"from": "task:T002", "to": "feature:auth", "relationType": "part_of"},
-  {"from": "task:T002", "to": "task:T001", "relationType": "depends_on"}
+  {"from": "task:T001:auth-schema", "to": "feature:auth", "relationType": "part_of"},
+  {"from": "task:T002:auth-api", "to": "feature:auth", "relationType": "part_of"},
+  {"from": "task:T002:auth-api", "to": "task:T001:auth-schema", "relationType": "depends_on"}
 ]
 ```
 
@@ -83,20 +83,20 @@ create_relation relations=[
 
 Use `search_nodes` with entity names to find connected entities:
 ```json
-search_nodes query="task:T001"
+search_nodes query="task:T001:database-schema"
 ```
 
-Or use `open_node` to get full entity details including relations:
+Use `open_node` to get full entity details. It does not return relations:
 ```json
-open_node names=["task:T001"]
+open_node names=["task:T001:database-schema"]
 ```
 
 ## Deleting Relations
 
 ```json
 delete_relation relations=[{
-  "from": "bug:B001",
-  "to": "task:T003",
+  "from": "bug:B001:null-pointer",
+  "to": "task:T003:deploy",
   "relationType": "blocks"
 }]
 ```

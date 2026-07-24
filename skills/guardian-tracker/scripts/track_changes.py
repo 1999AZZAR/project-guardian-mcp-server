@@ -1,143 +1,110 @@
 #!/usr/bin/env python3
-"""Track git changes and output JSON for Project-Guardian entity creation.
-
-Usage:
-    python3 track_changes.py [--commit <hash>] [--since <time>] [--format json|text]
-
-Outputs changed files with summaries, ready for entity/observation creation.
-"""
+"""Report exact Git change paths for Project Guardian tracking."""
 
 import argparse
 import json
 import subprocess
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 def run_git(args: list[str]) -> str:
-    result = subprocess.run(
-        ["git"] + args,
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    return result.stdout.strip()
+    result = subprocess.run(["git", *args], capture_output=True, text=True, check=True)
+    return result.stdout
 
 
-def get_commit_info(commit_hash: str) -> dict:
-    info = run_git(["log", "-1", "--format=%H|%s|%an|%ai", commit_hash])
-    parts = info.split("|", 3)
-    return {
-        "hash": parts[0] if len(parts) > 0 else commit_hash,
-        "message": parts[1] if len(parts) > 1 else "",
-        "author": parts[2] if len(parts) > 2 else "",
-        "date": parts[3] if len(parts) > 3 else "",
-    }
+def commit_info(revision: str) -> dict[str, str]:
+    fields = run_git(["log", "-1", "--format=%H%x00%s%x00%ai", revision]).rstrip("\n").split("\0")
+    if len(fields) != 3:
+        raise ValueError(f"Unable to parse commit metadata for {revision}")
+    return {"hash": fields[0], "message": fields[1], "date": fields[2]}
 
 
-def get_changed_files(commit_hash: str) -> list[dict]:
-    stat = run_git(["diff", f"{commit_hash}~1", commit_hash, "--stat", "--format="])
-    files = []
-    for line in stat.splitlines():
-        if "|" in line:
-            parts = line.split("|")
-            filepath = parts[0].strip()
-            changes = parts[1].strip()
-            files.append({"path": filepath, "changes": changes})
-    return files
+def empty_tree() -> str:
+    return run_git(["hash-object", "-t", "tree", "/dev/null"]).strip()
 
 
-def get_changed_files_since(since: str) -> list[dict]:
-    stat = run_git(["diff", f"HEAD~{since}" if since.isdigit() else since, "--stat", "--format="])
-    files = []
-    for line in stat.splitlines():
-        if "|" in line:
-            parts = line.split("|")
-            filepath = parts[0].strip()
-            changes = parts[1].strip()
-            files.append({"path": filepath, "changes": changes})
-    return files
-
-
-def get_diff_summary(commit_hash: str, filepath: str) -> str:
+def parent_or_empty(commit: str) -> str:
     try:
-        diff = run_git(["diff", f"{commit_hash}~1", commit_hash, "--", filepath, "--shortstat"])
-        return diff
+        return run_git(["rev-parse", f"{commit}^" ]).strip()
     except subprocess.CalledProcessError:
-        return ""
+        return empty_tree()
 
 
-def format_text_output(data: dict) -> str:
-    lines = [f"Commit: {data['commit']['hash'][:8]}"]
-    lines.append(f"Message: {data['commit']['message']}")
-    lines.append(f"Author: {data['commit']['author']}")
-    lines.append(f"Date: {data['commit']['date']}")
-    lines.append(f"Files changed: {len(data['files'])}")
-    lines.append("")
-    for f in data["files"]:
-        lines.append(f"  {f['path']} ({f['changes']})")
-    return "\n".join(lines)
+def base_from_since(value: str) -> str:
+    if value.isdigit():
+        return f"HEAD~{value}"
+    revision = run_git(["rev-list", "-1", f"--before={value}", "HEAD"]).strip()
+    if not revision:
+        raise ValueError(f"No commit found before {value!r}")
+    return revision
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Track git changes for Project-Guardian")
-    parser.add_argument("--commit", "-c", help="Specific commit hash to analyze")
-    parser.add_argument("--since", "-s", default="1", help="Changes since N commits ago or date")
-    parser.add_argument("--format", "-f", choices=["json", "text"], default="json")
+def changed_files(base: str, target: str | None = None) -> list[dict[str, str]]:
+    args = ["diff", "--name-status", "-z", base]
+    if target:
+        args.append(target)
+    records = run_git(args).split("\0")
+    files = []
+    index = 0
+    while index < len(records) and records[index]:
+        status = records[index]
+        index += 1
+        old_path = None
+        if status.startswith(("R", "C")):
+            old_path, path = records[index:index + 2]
+            index += 2
+        else:
+            path = records[index]
+            index += 1
+        entry = {"path": path, "changes": status}
+        if old_path:
+            entry["old_path"] = old_path
+        files.append(entry)
+    return files
+
+
+def untracked_files() -> list[dict[str, str]]:
+    return [
+        {"path": path, "changes": "??"}
+        for path in run_git(["ls-files", "--others", "--exclude-standard", "-z"]).split("\0")
+        if path
+    ]
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument("--commit", "-c", help="Specific commit to analyze")
+    group.add_argument("--since", "-s", default="1", help="Changes since N commits ago or a Git date")
+    parser.add_argument("--format", "-f", choices=("json", "text"), default="json")
     args = parser.parse_args()
 
     try:
         run_git(["rev-parse", "--git-dir"])
-    except subprocess.CalledProcessError:
-        print("Error: Not a git repository", file=sys.stderr)
-        sys.exit(1)
-
-    now = datetime.utcnow().isoformat() + "Z"
-
-    if args.commit:
-        commit = get_commit_info(args.commit)
-        files = get_changed_files(args.commit)
-    else:
-        commit = {
-            "hash": "HEAD",
-            "message": "current changes",
-            "author": "",
-            "date": now,
-        }
-        files = get_changed_files_since(args.since)
-
-    output = {
-        "timestamp": now,
-        "commit": commit,
-        "files": files,
-        "suggestions": [],
-    }
-
-    for f in files:
-        path = f["path"]
-        if path.endswith((".ts", ".js", ".py", ".go", ".rs", ".java", ".cpp", ".c")):
-            entity_type = "file"
-            name = f"file:{path}"
-        elif path.endswith((".json", ".yaml", ".yml", ".toml", ".env")):
-            entity_type = "file"
-            name = f"file:{path}"
-        elif path.endswith((".md", ".txt", ".rst")):
-            entity_type = "file"
-            name = f"file:{path}"
+        now = datetime.now(timezone.utc).isoformat()
+        if args.commit:
+            commit = commit_info(args.commit)
+            files = changed_files(parent_or_empty(args.commit), args.commit)
         else:
-            entity_type = "file"
-            name = f"file:{path}"
+            commit = {"hash": "WORKTREE", "message": "current changes", "date": now}
+            files = changed_files(base_from_since(args.since)) + untracked_files()
+        deduplicated = {entry["path"]: entry for entry in files}
+        files = list(deduplicated.values())
+    except (subprocess.CalledProcessError, ValueError) as exc:
+        detail = exc.stderr.strip() if isinstance(exc, subprocess.CalledProcessError) and exc.stderr else str(exc)
+        print(f"Error: {detail}", file=sys.stderr)
+        return 1
 
-        output["suggestions"].append({
-            "entity": {"name": name, "entityType": entity_type},
-            "observation": f"[{now[:10]}] commit:{commit['hash'][:8]} | changes: {f['changes']}",
-        })
-
+    output = {"timestamp": now, "commit": commit, "files": files}
     if args.format == "json":
         print(json.dumps(output, indent=2))
     else:
-        print(format_text_output(output))
+        print(f"Revision: {commit['hash']}\nFiles changed: {len(files)}")
+        for entry in files:
+            print(f"  {entry['changes']} {entry['path']}")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
