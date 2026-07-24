@@ -10,7 +10,7 @@ Local security auditing for credentials and container vulnerabilities.
 ## Core Workflows
 
 ### 1. Secret Scanning
-Scan specific project directories for hardcoded credentials. 
+Scan specific project directories for hardcoded credentials.
 - **Tool**: `scripts/scan_secrets.py`
 - **Usage**: `python3 $WORKSPACE/skills/guardian-security/scripts/scan_secrets.py <path_to_project>`
 - **Workflow**:
