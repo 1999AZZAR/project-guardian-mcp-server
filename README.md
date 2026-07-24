@@ -9,6 +9,7 @@ A Model Context Protocol (MCP) server for persistent project memory, knowledge-g
 - [Features](#features)
   - [Project Guardian Memory System](#project-guardian-memory-system)
   - [Streamlined Database Operations](#streamlined-database-operations)
+  - [Runtime Companion Integration](#runtime-companion-integration)
   - [AI Guidance System](#ai-guidance-system)
   - [Advanced Features](#advanced-features)
   - [Enterprise Features](#enterprise-features)
@@ -27,6 +28,7 @@ A Model Context Protocol (MCP) server for persistent project memory, knowledge-g
   - [Project Management Workflow](#project-management-workflow)
   - [Database Operations](#database-operations)
 - [Configuration](#configuration)
+  - [Optional Runtime Services](#optional-runtime-services)
   - [For Cursor IDE](#for-cursor-ide)
   - [For Claude Desktop](#for-claude-desktop)
 - [Project Structure](#project-structure)
@@ -50,6 +52,21 @@ A Model Context Protocol (MCP) server for persistent project memory, knowledge-g
 - **SQL Execution**: Direct SQL query execution
 - **Data Transfer**: Import/export CSV and JSON files
 - **27 Tools Total**: Seven database tools, ten memory tools, one guidance tool, and nine runtime companion tools
+
+### Runtime Companion Integration
+
+The repository includes six `guardian-*` AgentSkills and exposes their operational capabilities through typed MCP tools:
+
+| Companion | Runtime role | MCP surface |
+| --- | --- | --- |
+| `guardian-memory` | Persistent entities, relations, and observations | Ten memory tools |
+| `guardian-session` | Active-task, bug, blocker, and recent-change summaries | `get_session_context` |
+| `guardian-tracker` | Bounded Git diff and untracked-file analysis | `analyze_git_changes` |
+| `guardian-wall` | Untrusted-text normalization and prompt-injection detection | `inspect_untrusted_text` |
+| `guardian-security` | Secret scanning and Trivy image scanning | `scan_project_secrets`, `scan_container_image` |
+| `guardian-cache` | Optional namespaced Redis storage | Four `cache_*` tools |
+
+AgentSkills provide host-side workflows and instructions. The MCP runtime implements the corresponding operations directly in TypeScript, except container scanning, which invokes Trivy as a bounded external process. No generic script or shell execution tool is exposed.
 
 ### AI Guidance System
 - **11 Resources**: Templates, best practices, project status, and companion capability health
@@ -272,15 +289,47 @@ Invoke a project guidance framework to receive specialized instructions and chec
 
 ### Runtime Companion Tools (9 tools)
 
-- `get_session_context`: Summarize active tasks, open bugs, recent changes, and blockers.
-- `analyze_git_changes`: Return bounded changed and untracked Git paths.
-- `inspect_untrusted_text`: Normalize untrusted text and flag prompt-injection indicators.
-- `scan_project_secrets`: Scan a workspace-relative path without returning secret values.
-- `scan_container_image`: Run a bounded HIGH/CRITICAL Trivy image scan.
-- `cache_get`: Read a namespaced Redis value.
-- `cache_set`: Store a namespaced Redis value with an optional TTL.
-- `cache_delete`: Delete a namespaced Redis value.
-- `cache_scan`: Cursor-scan `mema:*` Redis keys.
+#### `get_session_context`
+Summarize active tasks, open bugs, recent changes, blockers, and the next suggested action directly from the knowledge graph.
+
+- `limit` (optional, 1-50, default 10): Maximum entries per result group.
+
+#### `analyze_git_changes`
+Return exact machine-readable changed paths from Git, including renames and optionally untracked files.
+
+- `commit` (optional): Analyze one commit against its parent.
+- `since` (optional, default `1`): Analyze changes since N commits ago or a Git date.
+- `includeUntracked` (optional, default `true`): Include untracked files for worktree analysis.
+- `maxFiles` (optional, 1-500, default 100): Bound returned paths.
+- `commit` and a custom `since` value are mutually exclusive.
+
+#### `inspect_untrusted_text`
+Normalize up to 256 KiB of untrusted text and detect hidden formatting, instruction overrides, role mimicry, hidden HTML/CSS, remote exfiltration markup, and encoded instruction-like content.
+
+- `text` (required): External or otherwise untrusted content.
+- Detection is heuristic. Returned normalized text remains untrusted data.
+
+#### `scan_project_secrets`
+Scan a workspace-relative file or directory for likely hardcoded credentials. Results contain only type, relative file path, and line number; matched values are never returned.
+
+- `path` (optional, default `.`): Workspace-relative scan target.
+- `exclude` (optional): Additional directory names to skip.
+- `maxFindings` (optional, 1-500, default 100): Bound findings.
+- Absolute paths, traversal, missing paths, and symlink escapes are rejected.
+
+#### `scan_container_image`
+Run a timeout-limited Trivy scan and return bounded HIGH/CRITICAL vulnerability summaries.
+
+- `image` (required): Container image reference.
+- `maxFindings` (optional, 1-500, default 100): Bound findings.
+- Requires Trivy. Image values beginning with `-`, containing whitespace, or containing control characters are rejected.
+
+#### Redis cache tools
+
+- `cache_get`: Read one `mema:<category>:<name>` key.
+- `cache_set`: Store a value up to 512 KiB with optional `ttlSeconds` from 1 to 604800.
+- `cache_delete`: Delete one namespaced key.
+- `cache_scan`: Cursor-scan a `mema:*` pattern with a bounded count.
 
 Project scan paths are restricted to the current Git workspace. Redis tools connect lazily and return an unavailable error when `REDIS_URL` is unset. Container scanning remains unavailable until Trivy is installed. Read `project-guardian://companions/catalog` for current capability health.
 
@@ -321,6 +370,9 @@ Cached information about project team members and their roles within the organiz
 
 #### `project-guardian://status/recent-changes`
 Recent additions, updates, and modifications to the knowledge graph for audit and monitoring.
+
+#### `project-guardian://companions/catalog`
+Lists all six companions, their MCP tools, external prerequisites, and current availability.
 
 ### Available Prompts
 
@@ -548,7 +600,7 @@ Clients integrating this MCP server should treat the first system message as the
 
 ## Usage Examples
 
-![Blotcat routing Prompt → Tools → memory.db, 18 tools in hand](assets/blotcat-workflow.jpg)
+![Blotcat routing prompts and tools into memory.db](assets/blotcat-workflow.jpg)
 
 ### Project Guardian Setup
 
@@ -641,6 +693,22 @@ const importResult = await mcpClient.callTool('import_data', {
 
 ## Configuration
 
+### Optional Runtime Services
+
+Redis is optional and is never contacted during startup. Configure it only when cache tools are needed:
+
+```json
+{
+  "env": {
+    "REDIS_URL": "redis://localhost:6379/0"
+  }
+}
+```
+
+Trivy is discovered from `PATH` when `scan_container_image` is called. Missing Redis or Trivy affects only its associated tools; memory, database, guidance, session, Git, wall, and project-secret tools remain available.
+
+The companion catalog reports `available`, `optional`, or `unavailable` for each runtime capability. The server uses stdio transport and does not expose an HTTP listener.
+
 ### For Cursor IDE
 
 Add this server to your Cursor MCP configuration (`~/.cursor/mcp.json`):
@@ -690,11 +758,16 @@ project-guardian-mcp-server/
 │   │   ├── tool-registry.ts     # Tool definitions and listing
 │   │   ├── database-tools.ts    # Database operation tool schemas
 │   │   ├── memory-tools.ts      # Memory management tool schemas
-│   │   └── guidance-tools.ts    # Guidance tool schema
+│   │   ├── guidance-tools.ts    # Guidance tool schema
+│   │   └── runtime-tools.ts     # Companion runtime tool schemas
+│   ├── runtime/
+│   │   ├── path-guard.ts        # Workspace path containment
+│   │   └── runtime-capabilities.ts # Native companion implementations
 │   ├── resources/
 │   │   ├── resource-registry.ts  # Resource definitions and handlers
 │   │   ├── resource-definitions.ts # Static resource metadata
-│   │   └── resource-handlers.ts   # Dynamic resource content generation
+│   │   ├── resource-handlers.ts   # Dynamic resource content generation
+│   │   └── companion-catalog.ts   # Companion capability health
 │   └── prompts/
 │       ├── prompt-registry.ts       # Prompt definitions and handlers
 │       ├── prompt-definitions.ts    # Static prompt metadata
@@ -705,11 +778,13 @@ project-guardian-mcp-server/
 │   ├── resource-registry.test.ts
 │   ├── prompt-registry.test.ts
 │   ├── request-handlers.test.ts
+│   ├── runtime-capabilities.test.ts
 │   ├── import-export.test.ts
 │   ├── sqlite-manager.test.ts
 │   └── bug-fixes.test.ts
-├── dist/                     # Compiled JavaScript output (optimized for production)
-├── memory.db                 # SQLite database file (created on first run)
+├── skills/                   # Six distributable guardian-* AgentSkills
+├── dist/                     # Ignored production build output
+├── memory.db                 # Ignored local SQLite state, created on first run
 ├── package.json              # Project dependencies and scripts
 ├── package.prod.json         # Production-only dependencies for smaller bundle
 ├── tsconfig.json            # TypeScript configuration
@@ -721,12 +796,14 @@ project-guardian-mcp-server/
 
 - **server.ts**: MCP server lifecycle, transport, handlers, and shutdown coordination
 - **handlers/request-handlers.ts**: Central dispatcher routing tool calls to appropriate managers
-- **tools/**: Tool definition and registration system (18 tools total)
+- **tools/**: Tool definition and registration system (27 tools total)
   - `tool-registry.ts`: Lists all available tools
   - `database-tools.ts`: Database operation schemas (7 tools)
   - `memory-tools.ts`: Memory management schemas (10 tools)
   - `guidance-tools.ts`: Autonomous guidance tool schema (1 tool)
-- **resources/**: Resource management system (10 resources total)
+  - `runtime-tools.ts`: Typed companion capability schemas (9 tools)
+- **runtime/**: Workspace guards and companion runtime implementations
+- **resources/**: Resource management system (11 resources total)
   - `resource-registry.ts`: Resource listing and content serving
   - `resource-definitions.ts`: Static resource metadata
   - `resource-handlers.ts`: Dynamic content generation
@@ -739,6 +816,11 @@ project-guardian-mcp-server/
 - **sqlite-manager.ts**: Database abstraction with bounded connection caching and schema management
 - **import-export.ts**: CSV, JSON, and SQL data transfer utilities
 - **types.ts**: Zod schemas for input validation and TypeScript type safety
+- **skills/**: Agent-side workflows, scripts, references, and assets for the six companion packages
+
+### Local State
+
+`memory.db` and its `memory.db-*` sidecars are runtime state and are ignored by Git. A clone starts with no project memory; the server creates the database and schema locally on first run. Back up or export memory explicitly when it must move between machines. Never commit the database because observations can contain private project context.
 
 ## Development
 

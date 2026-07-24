@@ -105,7 +105,7 @@ mcp-servers.json
 demo-servers/
 # Project Guardian
 memory.db
-memory.db-journal
+memory.db-*
 
 # Python
 __pycache__/
