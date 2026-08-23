@@ -38,6 +38,8 @@ A Model Context Protocol (MCP) server for persistent project memory, knowledge-g
 ## Features
 
 ### Project Guardian Memory System
+
+![Blotcat pouring a small project memory bucket into a large central memory vat](assets/blotcat-memory-sync.jpg)
 - **Knowledge Graph**: Maintain project entities, relationships, and observations
 - **Entity Management**: Projects, tasks, people, resources with rich metadata
 - **Relationship Mapping**: Dependencies, ownership, blockers, and connections
@@ -151,6 +153,8 @@ When you pull new updates or modify the code, you must rebuild the server and re
 4. **Important**: Restart your IDE or the MCP connection so the client can fetch the newly updated tools and prompts.
 
 ## Available Tools
+
+![Blotcat opening a large toolbox with three labeled drawers, holding a wrench](assets/blotcat-tool-categories.jpg)
 
 This MCP server currently provides **30 tools**:
 
@@ -720,6 +724,8 @@ const importResult = await mcpClient.callTool('import_data', {
 ```
 
 ## Configuration
+
+![Blotcat plugging a giant power cord into a wall socket](assets/blotcat-configuration.jpg)
 
 ### Environment Variables
 
