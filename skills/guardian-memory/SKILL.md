@@ -7,7 +7,7 @@ description: "Maintain project context in Project Guardian's memory.db knowledge
 
 ## Purpose
 
-Every project interaction creates knowledge. This skill ensures nothing is lost. Use Project-Guardian MCP tools to maintain a living knowledge graph of your project in `memory.db`.
+Every project interaction creates knowledge. This skill ensures nothing is lost. Use Project-Guardian MCP tools to maintain a living knowledge graph of your project in `memory.db`. Every write also mirrors automatically into the central aggregate at `~/memory/memory.db`, so context stays available across projects; call `sync_central_memory` to force a sync on demand.
 
 ## Safety
 
@@ -23,7 +23,9 @@ Every project interaction creates knowledge. This skill ensures nothing is lost.
 initialize_memory
 ```
 
-`initialize_memory` may modify repository configuration, install hooks, and consolidate databases. Explain the effects and get user approval before calling it.
+`initialize_memory` creates the database schema for the active project and ensures the central memory at `~/memory/memory.db` exists. It no longer installs hooks or consolidates databases: use `setup_pre_commit` (with user approval) for hooks, and leave `GUARDIAN_AUTO_MERGE` unset to keep sub-project databases separate.
+
+If the session started outside the project directory, call `set_project_root` with the absolute project path first so memory is written to the right project.
 
 Then create the project root entity:
 

@@ -51,7 +51,7 @@ A Model Context Protocol (MCP) server for persistent project memory, knowledge-g
 ### Streamlined Database Operations
 
 ![Blotcat efficiently sorting raw data blocks on a conveyor belt into the structured memory.db SQLite wall](assets/blotcat-db-ops.jpg)
-- **Single Database**: Uses only `memory.db` for all operations
+- **Two Stores, One Interface**: Every project uses its own `memory.db`; all seven database tools can also address the central aggregate with `database: "central"`
 - **Core CRUD**: Essential database operations (query, insert, update, delete)
 - **SQL Execution**: Direct SQL query execution
 - **Data Transfer**: Import/export CSV and JSON files
@@ -156,15 +156,18 @@ This MCP server currently provides **30 tools**:
 
 ### Database Operations (7 tools)
 
+All database tools accept an optional `database` selector: `project` (default) targets the active project's `memory.db`, `central` targets the central aggregate at `~/memory/memory.db`.
+
 #### `execute_sql` - Execute SQL Query
-Execute raw SQL queries on memory.db.
+Execute raw SQL queries on the selected memory database.
 
 **Parameters:**
 - `query` (required): SQL query string
 - `parameters` (optional): Query parameters array
+- `database` (optional): `"project"` or `"central"`, default `"project"`
 
 #### `query_data` - Query Table Data
-Query data from memory.db tables with filtering and pagination.
+Query memory tables with filtering and pagination.
 
 **Parameters:**
 - `table` (required): Table name
@@ -173,40 +176,45 @@ Query data from memory.db tables with filtering and pagination.
 - `offset` (optional): Number of rows to skip
 - `orderBy` (optional): Column to sort by
 - `orderDirection` (optional): Sort direction ("ASC" or "DESC")
+- `database` (optional): `"project"` or `"central"`, default `"project"`
 
 #### `insert_data` - Insert Records
-Insert records into memory.db table.
+Insert records into a memory table.
 
 **Parameters:**
 - `table` (required): Table name
 - `records` (required): Array of record objects to insert
+- `database` (optional): `"project"` or `"central"`, default `"project"`
 
 #### `update_data` - Update Records
-Update records in memory.db table.
+Update records in a memory table.
 
 **Parameters:**
 - `table` (required): Table name
 - `conditions` (required): WHERE conditions for records to update
 - `updates` (required): Fields to update
+- `database` (optional): `"project"` or `"central"`, default `"project"`
 
 #### `delete_data` - Delete Records
-Delete records from memory.db table.
+Delete records from a memory table.
 
 **Parameters:**
 - `table` (required): Table name
 - `conditions` (required): WHERE conditions for records to delete
+- `database` (optional): `"project"` or `"central"`, default `"project"`
 
 #### `import_data` - Import Data
-Import data from CSV or JSON file into memory.db table.
+Import data from CSV or JSON file into a memory table.
 
 **Parameters:**
 - `table` (required): Target table name
 - `filePath` (required): Path to source file
 - `format` (optional): File format ("csv" or "json")
 - `options` (optional): Import options (delimiter, hasHeader)
+- `database` (optional): `"project"` or `"central"`, default `"project"`
 
 #### `export_data` - Export Data
-Export memory.db table data to CSV or JSON file.
+Export memory table data to CSV or JSON file.
 
 **Parameters:**
 - `table` (required): Source table name
@@ -214,6 +222,7 @@ Export memory.db table data to CSV or JSON file.
 - `format` (optional): Output format ("csv" or "json")
 - `conditions` (optional): WHERE conditions to filter export
 - `options` (optional): Export options (delimiter, includeHeader)
+- `database` (optional): `"project"` or `"central"`, default `"project"`
 
 ### Memory and Guidance Tools (11 tools)
 
@@ -272,12 +281,12 @@ Remove relationships between project entities (supports single or batch).
   - `relationType`: Relationship type to delete
 
 #### `read_graph` - Read Project Knowledge Graph
-Retrieve the entire project knowledge graph with all entities and relationships.
+Retrieve the full knowledge graph, merging the active project database with the central aggregate. Project entries win over central entries with the same name.
 
 **Parameters:** None
 
 #### `search_nodes` - Search Project Knowledge
-Search for entities and relations matching a query across names, types, and content.
+Search for entities and relations matching a query across names, types, and content, in both the project database and the central aggregate.
 
 **Parameters:**
 - `query` (required): Search term
