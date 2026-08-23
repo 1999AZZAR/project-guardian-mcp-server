@@ -4,10 +4,11 @@ export const databaseTools: Tool[] = [
   // Core Database Operations (7 tools)
   {
     name: 'execute_sql',
-    description: 'Execute raw SQL query on memory.db',
+    description: "Execute raw SQL query on the project or central memory database (database: 'project' | 'central', default 'project')",
     inputSchema: {
       type: 'object',
       properties: {
+        database: { type: 'string', enum: ['project', 'central'], description: "Target store: active project database or central aggregate", default: 'project' },
         query: { type: 'string', description: 'SQL query to execute' },
         parameters: { type: 'array', description: 'Query parameters' },
       },
@@ -16,10 +17,11 @@ export const databaseTools: Tool[] = [
   },
   {
     name: 'query_data',
-    description: 'Query data from memory.db tables',
+    description: "Query data from project or central memory tables (database: 'project' | 'central', default 'project')",
     inputSchema: {
       type: 'object',
       properties: {
+        database: { type: 'string', enum: ['project', 'central'], description: "Target store: active project database or central aggregate", default: 'project' },
         table: { type: 'string', description: 'Table name' },
         conditions: { type: 'object', description: 'WHERE conditions' },
         limit: { type: 'number', minimum: 1, maximum: 10000, description: 'Maximum number of rows' },
@@ -32,10 +34,11 @@ export const databaseTools: Tool[] = [
   },
   {
     name: 'insert_data',
-    description: 'Insert records into memory.db table',
+    description: "Insert records into a project or central memory table (database: 'project' | 'central', default 'project')",
     inputSchema: {
       type: 'object',
       properties: {
+        database: { type: 'string', enum: ['project', 'central'], description: "Target store: active project database or central aggregate", default: 'project' },
         table: { type: 'string', description: 'Table name' },
         records: {
           type: 'array',
@@ -52,6 +55,7 @@ export const databaseTools: Tool[] = [
     inputSchema: {
       type: 'object',
       properties: {
+        database: { type: 'string', enum: ['project', 'central'], description: "Target store: active project database or central aggregate", default: 'project' },
         table: { type: 'string', description: 'Table name' },
         conditions: { type: 'object', description: 'WHERE conditions' },
         updates: { type: 'object', description: 'Fields to update' },
@@ -65,6 +69,7 @@ export const databaseTools: Tool[] = [
     inputSchema: {
       type: 'object',
       properties: {
+        database: { type: 'string', enum: ['project', 'central'], description: "Target store: active project database or central aggregate", default: 'project' },
         table: { type: 'string', description: 'Table name' },
         conditions: { type: 'object', description: 'WHERE conditions' },
       },
@@ -77,12 +82,14 @@ export const databaseTools: Tool[] = [
     inputSchema: {
       type: 'object',
       properties: {
+        database: { type: 'string', enum: ['project', 'central'], description: "Target store: active project database or central aggregate", default: 'project' },
         table: { type: 'string', description: 'Table name' },
         filePath: { type: 'string', description: 'Path to the file' },
         format: { type: 'string', enum: ['csv', 'json'], default: 'csv', description: 'File format' },
         options: {
           type: 'object',
           properties: {
+        database: { type: 'string', enum: ['project', 'central'], description: "Target store: active project database or central aggregate", default: 'project' },
             delimiter: { type: 'string', description: 'CSV delimiter' },
             hasHeader: { type: 'boolean', description: 'CSV has header row' },
           },
@@ -97,6 +104,7 @@ export const databaseTools: Tool[] = [
     inputSchema: {
       type: 'object',
       properties: {
+        database: { type: 'string', enum: ['project', 'central'], description: "Target store: active project database or central aggregate", default: 'project' },
         table: { type: 'string', description: 'Table name' },
         filePath: { type: 'string', description: 'Output file path' },
         format: { type: 'string', enum: ['csv', 'json'], default: 'csv', description: 'Output format' },
@@ -104,6 +112,7 @@ export const databaseTools: Tool[] = [
         options: {
           type: 'object',
           properties: {
+        database: { type: 'string', enum: ['project', 'central'], description: "Target store: active project database or central aggregate", default: 'project' },
             delimiter: { type: 'string', description: 'CSV delimiter' },
             includeHeader: { type: 'boolean', description: 'Include header in CSV' },
           },

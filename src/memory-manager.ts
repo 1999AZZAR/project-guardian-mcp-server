@@ -5,10 +5,12 @@ import * as path from 'path';
 import { exec, execFile, spawn } from 'child_process';
 import { promisify } from 'util';
 import { homedir } from 'os';
+import { isAbsolute, resolve, basename, dirname, join as joinPath } from 'path';
 import { createInterface } from 'readline';
 
 const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
+const MAX_CENTRAL_BACKUPS = 7;
 
 export class MemoryManager {
   private sqliteManager: SQLiteManager;
@@ -19,7 +21,10 @@ export class MemoryManager {
   constructor(sqliteManager: SQLiteManager, targetRoot?: string) {
     this.sqliteManager = sqliteManager;
     this.targetRoot = targetRoot ?? process.cwd();
-    this.centralDbPath = process.env.GUARDIAN_CENTRAL_DB || path.join(process.env.HOME || homedir(), 'memory.db');
+    const configured = process.env.GUARDIAN_CENTRAL_DB;
+    this.centralDbPath = (configured && isAbsolute(configured))
+      ? resolve(configured)
+      : path.join(homedir(), 'memory', 'memory.db');
   }
 
   setTargetRoot(targetRoot: string): void {
@@ -51,7 +56,7 @@ export class MemoryManager {
   }
 
   async syncToCentral(): Promise<{ entities: number; relations: number }> {
-    const graph = await this.readGraph();
+    const graph = await this.readStore(this.memoryDbName);
     if (graph.entities.length === 0 && graph.relations.length === 0) {
       return { entities: 0, relations: 0 };
     }
@@ -74,14 +79,112 @@ export class MemoryManager {
       );
     }
 
+    await this.backupCentralIfNeeded();
     return { entities: graph.entities.length, relations: graph.relations.length };
   }
 
   private async syncToCentralSafe(): Promise<void> {
+    if (process.env.NODE_ENV === 'test') return;
     try {
       await this.syncToCentral();
     } catch (err) {
       console.warn('Central memory sync failed:', err);
+    }
+  }
+
+  getCentralDatabaseId(): string {
+    return this.centralDbPath;
+  }
+
+  static buildBackupName(date: Date): string {
+    const dd = String(date.getDate()).padStart(2, '0');
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    return `${dd}${mm}${date.getFullYear()}_memory.db`;
+  }
+
+  static parseBackupName(filename: string): Date | null {
+    const match = /^(\d{2})(\d{2})(\d{4})_memory\.db$/.exec(basename(filename));
+    if (!match) return null;
+    const day = Number(match[1]);
+    const month = Number(match[2]);
+    const year = Number(match[3]);
+    const date = new Date(year, month - 1, day);
+    if (isNaN(date.getTime()) || date.getDate() !== day || date.getMonth() !== month - 1 || date.getFullYear() !== year) {
+      return null;
+    }
+    return date;
+  }
+
+  static selectBackupsToPrune(filenames: string[], maxKeep: number): string[] {
+    if (maxKeep < 0) maxKeep = 0;
+    const dated = filenames
+      .map(name => ({ name, date: MemoryManager.parseBackupName(name) }))
+      .filter((entry): entry is { name: string; date: Date } => entry.date !== null)
+      .sort((a, b) => b.date.getTime() - a.date.getTime());
+    return dated.slice(maxKeep).map(entry => entry.name).reverse();
+  }
+
+  private getBackupDir(): string {
+    return joinPath(dirname(this.centralDbPath), 'backup');
+  }
+
+  private async migrateLegacyCentralDatabase(): Promise<void> {
+    const legacyPath = path.join(homedir(), 'memory.db');
+    if (this.centralDbPath === legacyPath) return;
+    if (!fs.existsSync(legacyPath) || fs.existsSync(this.centralDbPath)) return;
+
+    try {
+      fs.mkdirSync(dirname(this.centralDbPath), { recursive: true });
+      fs.copyFileSync(legacyPath, this.centralDbPath);
+
+      // Verify the copy is readable before touching the original
+      const probe = await this.sqliteManager.executeSql(this.centralDbPath, 'SELECT COUNT(*) as count FROM entities');
+      if (!probe.success || !probe.data || typeof probe.data.rows[0]?.count !== 'number') {
+        throw new Error(probe.error || 'central database probe failed');
+      }
+
+      fs.mkdirSync(this.getBackupDir(), { recursive: true });
+      const seedBackup = joinPath(this.getBackupDir(), MemoryManager.buildBackupName(new Date()));
+      if (!fs.existsSync(seedBackup)) {
+        fs.copyFileSync(legacyPath, seedBackup);
+        this.pruneBackupsSync();
+      }
+
+      fs.unlinkSync(legacyPath);
+      console.error(`Migrated central memory from ${legacyPath} to ${this.centralDbPath}`);
+    } catch (err) {
+      console.error(`Central memory migration failed; continuing with legacy path ${legacyPath}:`, err);
+      this.centralDbPath = legacyPath;
+    }
+  }
+
+  private pruneBackupsSync(): void {
+    try {
+      const backupDir = this.getBackupDir();
+      if (!fs.existsSync(backupDir)) return;
+      const stale = MemoryManager.selectBackupsToPrune(fs.readdirSync(backupDir), MAX_CENTRAL_BACKUPS);
+      for (const name of stale) {
+        try { fs.unlinkSync(joinPath(backupDir, name)); } catch (e) {}
+      }
+    } catch (err) {
+      console.warn('Backup pruning failed:', err);
+    }
+  }
+
+  private async backupCentralIfNeeded(): Promise<void> {
+    try {
+      if (!fs.existsSync(this.centralDbPath)) return;
+      const backupDir = this.getBackupDir();
+      fs.mkdirSync(backupDir, { recursive: true });
+
+      const todayBackup = joinPath(backupDir, MemoryManager.buildBackupName(new Date()));
+      if (!fs.existsSync(todayBackup)) {
+        const escaped = todayBackup.replace(/'/g, "''");
+        await this.sqliteManager.executeSql(this.centralDbPath, `VACUUM INTO '${escaped}'`);
+      }
+      this.pruneBackupsSync();
+    } catch (err) {
+      console.warn('Central memory backup failed:', err);
     }
   }
 
@@ -200,6 +303,14 @@ export class MemoryManager {
     const manageProjectFiles = process.env.NODE_ENV !== 'test';
 
     const targetRoot = this.targetRoot;
+
+    // Central memory is always available, regardless of configuration
+    if (manageProjectFiles) try {
+      await this.migrateLegacyCentralDatabase();
+      await this.ensureCentralSchema();
+    } catch (err) {
+      console.warn('Central memory initialization failed:', err);
+    }
 
     // Create entities table
     const entitiesResult = await this.sqliteManager.createTable(this.memoryDbName, 'entities', {
@@ -521,31 +632,78 @@ export class MemoryManager {
     await this.syncToCentralSafe();
   }
 
+  private rowToEntity(row: any): Entity {
+    return {
+      name: row.name,
+      entityType: row.entity_type,
+      observations: this.safeParseObservations(row.observations),
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    };
+  }
+
+  private rowToRelation(row: any): Relation {
+    return {
+      from: row.from_entity,
+      to: row.to_entity,
+      relationType: row.relation_type,
+      createdAt: row.created_at
+    };
+  }
+
+  private mergeGraphs(graphs: KnowledgeGraph[]): KnowledgeGraph {
+    const entities = new Map<string, Entity>();
+    const relations = new Map<string, Relation>();
+    for (const graph of graphs) {
+      for (const entity of graph.entities) {
+        // Project entries win over central mirrors
+        if (!entities.has(entity.name)) entities.set(entity.name, entity);
+      }
+      for (const relation of graph.relations) {
+        const key = `${relation.from}\u0000${relation.to}\u0000${relation.relationType}`;
+        if (!relations.has(key)) relations.set(key, relation);
+      }
+    }
+    return { entities: [...entities.values()], relations: [...relations.values()] };
+  }
+
+  private async readStore(database: string): Promise<KnowledgeGraph> {
+    const entitiesResult = await this.sqliteManager.queryData(database, 'entities', {});
+    const relationsResult = await this.sqliteManager.queryData(database, 'relations', {});
+    return {
+      entities: (entitiesResult.success && entitiesResult.data)
+        ? entitiesResult.data.rows.map((row: any) => this.rowToEntity(row))
+        : [],
+      relations: (relationsResult.success && relationsResult.data)
+        ? relationsResult.data.rows.map((row: any) => this.rowToRelation(row))
+        : []
+    };
+  }
+
   async readGraph(): Promise<KnowledgeGraph> {
-    // Get all entities
-    const entitiesResult = await this.sqliteManager.queryData(this.memoryDbName, 'entities', {});
-    const entities: Entity[] = (entitiesResult.success && entitiesResult.data)
-      ? entitiesResult.data.rows.map((row: any) => ({
-          name: row.name,
-          entityType: row.entity_type,
-          observations: this.safeParseObservations(row.observations),
-          createdAt: row.created_at,
-          updatedAt: row.updated_at
-        }))
-      : [];
+    const projectResult = await this.sqliteManager.queryData(this.memoryDbName, 'entities', {});
+    const projectRelations = await this.sqliteManager.queryData(this.memoryDbName, 'relations', {});
+    const centralResult = await this.sqliteManager.queryData(this.centralDbPath, 'entities', {});
+    const centralRelations = await this.sqliteManager.queryData(this.centralDbPath, 'relations', {});
 
-    // Get all relations
-    const relationsResult = await this.sqliteManager.queryData(this.memoryDbName, 'relations', {});
-    const relations: Relation[] = (relationsResult.success && relationsResult.data)
-      ? relationsResult.data.rows.map((row: any) => ({
-          from: row.from_entity,
-          to: row.to_entity,
-          relationType: row.relation_type,
-          createdAt: row.created_at
-        }))
-      : [];
-
-    return { entities, relations };
+    return this.mergeGraphs([
+      {
+        entities: (projectResult.success && projectResult.data)
+          ? projectResult.data.rows.map((row: any) => this.rowToEntity(row))
+          : [],
+        relations: (projectRelations.success && projectRelations.data)
+          ? projectRelations.data.rows.map((row: any) => this.rowToRelation(row))
+          : []
+      },
+      {
+        entities: (centralResult.success && centralResult.data)
+          ? centralResult.data.rows.map((row: any) => this.rowToEntity(row))
+          : [],
+        relations: (centralRelations.success && centralRelations.data)
+          ? centralRelations.data.rows.map((row: any) => this.rowToRelation(row))
+          : []
+      }
+    ]);
   }
 
   async searchNodes(query: string): Promise<SearchResult> {
@@ -556,37 +714,30 @@ export class MemoryManager {
       SELECT * FROM entities
       WHERE LOWER(name) LIKE ? OR LOWER(entity_type) LIKE ? OR LOWER(observations) LIKE ?
     `;
-    const entitiesResult = await this.sqliteManager.executeSql(this.memoryDbName, entitiesQuery,
-      [searchTerm, searchTerm, searchTerm]);
-
-    const entities: Entity[] = (entitiesResult.success && entitiesResult.data)
-      ? entitiesResult.data.rows.map((row: any) => ({
-          name: row.name,
-          entityType: row.entity_type,
-          observations: this.safeParseObservations(row.observations),
-          createdAt: row.created_at,
-          updatedAt: row.updated_at
-        }))
-      : [];
 
     // Search relations by relation type
     const relationsQuery = `
       SELECT * FROM relations
       WHERE LOWER(relation_type) LIKE ? OR LOWER(from_entity) LIKE ? OR LOWER(to_entity) LIKE ?
     `;
-    const relationsResult = await this.sqliteManager.executeSql(this.memoryDbName, relationsQuery,
-      [searchTerm, searchTerm, searchTerm]);
 
-    const relations: Relation[] = (relationsResult.success && relationsResult.data)
-      ? relationsResult.data.rows.map((row: any) => ({
-          from: row.from_entity,
-          to: row.to_entity,
-          relationType: row.relation_type,
-          createdAt: row.created_at
-        }))
-      : [];
+    const params = [searchTerm, searchTerm, searchTerm];
+    const [projectEntities, projectRelations, centralEntities, centralRelations] = await Promise.all([
+      this.sqliteManager.executeSql(this.memoryDbName, entitiesQuery, params),
+      this.sqliteManager.executeSql(this.memoryDbName, relationsQuery, params),
+      this.sqliteManager.executeSql(this.centralDbPath, entitiesQuery, params),
+      this.sqliteManager.executeSql(this.centralDbPath, relationsQuery, params)
+    ]);
 
-    return { entities, relations };
+    const toEntities = (result: { success: boolean; data?: any }) =>
+      (result.success && result.data) ? result.data.rows.map((row: any) => this.rowToEntity(row)) : [];
+    const toRelations = (result: { success: boolean; data?: any }) =>
+      (result.success && result.data) ? result.data.rows.map((row: any) => this.rowToRelation(row)) : [];
+
+    return this.mergeGraphs([
+      { entities: toEntities(projectEntities), relations: toRelations(projectRelations) },
+      { entities: toEntities(centralEntities), relations: toRelations(centralRelations) }
+    ]);
   }
 
   async openNode(name: string): Promise<Entity | null> {

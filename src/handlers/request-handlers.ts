@@ -22,14 +22,16 @@ import { join, resolve, isAbsolute } from 'path';
 
 const execFileAsync = promisify(execFile);
 
+const DatabaseSelector = z.enum(['project', 'central']).default('project');
+
 const toolSchemas: Record<string, z.ZodSchema> = {
-  execute_sql: ExecuteSqlSchema.omit({ database: true }),
-  query_data: QueryDataSchema.omit({ database: true }),
-  insert_data: InsertDataSchema.omit({ database: true }),
-  update_data: UpdateDataSchema.omit({ database: true }),
-  delete_data: DeleteDataSchema.omit({ database: true }),
-  import_data: ImportFromFileSchema.omit({ database: true }),
-  export_data: ExportToFileSchema.omit({ database: true }),
+  execute_sql: ExecuteSqlSchema.omit({ database: true }).extend({ database: DatabaseSelector }),
+  query_data: QueryDataSchema.omit({ database: true }).extend({ database: DatabaseSelector }),
+  insert_data: InsertDataSchema.omit({ database: true }).extend({ database: DatabaseSelector }),
+  update_data: UpdateDataSchema.omit({ database: true }).extend({ database: DatabaseSelector }),
+  delete_data: DeleteDataSchema.omit({ database: true }).extend({ database: DatabaseSelector }),
+  import_data: ImportFromFileSchema.omit({ database: true }).extend({ database: DatabaseSelector }),
+  export_data: ExportToFileSchema.omit({ database: true }).extend({ database: DatabaseSelector }),
   create_entity: CreateEntitiesSchema,
   create_relation: CreateRelationsSchema,
   add_observation: AddObservationsSchema,
@@ -148,14 +150,19 @@ export class RequestHandlers {
     }
   }
 
+  private resolveDatabase(selector: string | undefined): string {
+    return selector === 'central' ? this.memoryManager.getCentralDatabaseId() : 'memory';
+  }
+
   private async handleDatabaseTool(name: string, args: any): Promise<any> {
+    const database = this.resolveDatabase(args.database);
     switch (name) {
       case 'execute_sql':
-        return await this.sqliteManager.executeSql('memory', args.query, args.parameters);
+        return await this.sqliteManager.executeSql(database, args.query, args.parameters);
 
       case 'query_data':
         return await this.sqliteManager.queryData(
-          'memory',
+          database,
           args.table,
           args.conditions,
           args.limit,
@@ -165,17 +172,17 @@ export class RequestHandlers {
         );
 
       case 'insert_data':
-        return await this.sqliteManager.insertData('memory', args.table, args.records);
+        return await this.sqliteManager.insertData(database, args.table, args.records);
 
       case 'update_data':
-        return await this.sqliteManager.updateData('memory', args.table, args.conditions, args.updates);
+        return await this.sqliteManager.updateData(database, args.table, args.conditions, args.updates);
 
       case 'delete_data':
-        return await this.sqliteManager.deleteData('memory', args.table, args.conditions);
+        return await this.sqliteManager.deleteData(database, args.table, args.conditions);
 
       case 'import_data':
         return await this.importExportManager.importFromFile(
-          'memory',
+          database,
           args.table,
           args.filePath,
           args.format,
@@ -184,7 +191,7 @@ export class RequestHandlers {
 
       case 'export_data':
         return await this.importExportManager.exportToFile(
-          'memory',
+          database,
           args.table,
           args.filePath,
           args.format,

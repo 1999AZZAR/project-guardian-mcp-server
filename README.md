@@ -44,7 +44,8 @@ A Model Context Protocol (MCP) server for persistent project memory, knowledge-g
 - **Observation Tracking**: Contextual notes and progress updates
 - **Text Search**: Case-insensitive matching across entity names, types, observations, and relations
 - **Per-Project Memory**: Each project gets its own `memory.db`. The server resolves the project root in this order: the `GUARDIAN_PROJECT_ROOT` environment variable, then the Git toplevel of its working directory, then `$XDG_DATA_HOME/project-guardian` as a shared fallback outside any Git repository
-- **Central Memory Mirror**: Every memory write also syncs into one central database (default `~/memory.db`), giving an aggregated, searchable map across all projects and a fallback when a project database is unavailable
+- **Central Memory Mirror**: Every memory write also syncs into one central database at `~/memory/memory.db`, giving an aggregated, searchable map across all projects and a fallback when a project database is unavailable. Reads through `read_graph` and `search_nodes` merge both stores, with project entries taking precedence
+- **Daily Central Backups**: On the first sync of each day, the central database is snapshotted to `~/memory/backup/ddmmyyyy_memory.db`; the seven most recent backups are kept and older ones pruned automatically. On first run, a legacy `~/memory.db` in the home directory is migrated into the new layout and used to seed the first backup
 - **On-Demand Pre-Commit Setup**: Nothing is installed at startup. Call `setup_pre_commit` when you want a generated `.pre-commit-config.yaml` and Git hooks in the active project
 
 ### Streamlined Database Operations
@@ -297,7 +298,7 @@ Invoke a project guidance framework to receive specialized instructions and chec
 ### Runtime Companion Tools (12 tools)
 
 #### `sync_central_memory`
-Copy the active project knowledge graph into the central memory database (`~/memory.db` by default, override with `GUARDIAN_CENTRAL_DB`). Entities are upserted and relations deduplicated, so the central database accumulates a searchable map across all projects. Every memory write also syncs automatically; call this tool to force a sync on demand.
+Copy the active project knowledge graph into the central memory database (`~/memory/memory.db` by default, override with `GUARDIAN_CENTRAL_DB`). Entities are upserted and relations deduplicated, so the central database accumulates a searchable map across all projects. Every memory write also syncs automatically; call this tool to force a sync on demand. The first sync of each day also snapshots the central database and prunes old backups beyond the newest seven.
 
 #### `set_project_root`
 Switch the active project memory database to the given absolute project path. Use this at session start when the server was launched outside the project directory, so memory is written to the project instead of the shared fallback database.
@@ -718,7 +719,7 @@ The server reads these variables at startup:
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `GUARDIAN_PROJECT_ROOT` | unset | Absolute path to the project root. When set, `memory.db` is stored here instead of relying on Git detection |
-| `GUARDIAN_CENTRAL_DB` | `~/memory.db` | Absolute path to the central memory database that every project syncs into |
+| `GUARDIAN_CENTRAL_DB` | `~/memory/memory.db` | Absolute path to the central memory database that every project syncs into. Backups are written to a `backup/` directory next to it |
 | `GUARDIAN_AUTO_MERGE` | unset | Set to `1` to enable scattered-database consolidation at startup. This merges nested `memory.db` files into the project-root database and deletes them, so leave it unset when sub-projects keep separate memories |
 | `REDIS_URL` | unset | Enables the Redis-backed `cache_*` tools |
 | `XDG_DATA_HOME` | platform default | Base directory for the shared fallback database outside a Git repository |
@@ -859,7 +860,9 @@ project-guardian-mcp-server/
 
 ### Local State
 
-`memory.db` and its `memory.db-*` sidecars are runtime state and are ignored by Git. Each project keeps its own database at its resolved project root (see [Environment Variables](#environment-variables)); projects outside any Git repository without an explicit root share the fallback database under `$XDG_DATA_HOME/project-guardian`. In addition, every memory write mirrors into the central database (default `~/memory.db`), which is a merge across projects: deleting an entity in one project does not remove it from the central copy, so treat the central database as a searchable aggregate rather than a per-project backup. A clone starts with no project memory; the server creates the database and schema locally on first run. Back up or export memory explicitly when it must move between machines. Never commit the database because observations can contain private project context.
+`memory.db` and its `memory.db-*` sidecars are runtime state and are ignored by Git. Each project keeps its own database at its resolved project root (see [Environment Variables](#environment-variables)); projects outside any Git repository without an explicit root share the fallback database under `$XDG_DATA_HOME/project-guardian`. In addition, every memory write mirrors into the central database at `~/memory/memory.db`, which is a merge across projects: deleting an entity in one project does not remove it from the central copy, so treat the central database as a searchable aggregate rather than a per-project backup. Daily snapshots live in `~/memory/backup/`. A clone starts with no project memory; the server creates the database and schema locally on first run. Back up or export memory explicitly when it must move between machines. Never commit the database because observations can contain private project context.
+
+The database tools (`execute_sql`, `query_data`, `insert_data`, `update_data`, `delete_data`, `import_data`, `export_data`) accept a `database` selector: `project` (default) targets the active project database, `central` targets the aggregate.
 
 ## Development
 
