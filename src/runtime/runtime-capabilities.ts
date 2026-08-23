@@ -39,6 +39,10 @@ export class RuntimeCapabilities {
     private redisUrl = process.env.REDIS_URL
   ) {}
 
+  setWorkspaceRoot(root: string): void {
+    this.pathGuard = new PathGuard(root);
+  }
+
   async getSessionContext(input: GetSessionContextInput) {
     const graph = await this.memoryManager.readGraph();
     const entities = graph.entities

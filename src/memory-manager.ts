@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { exec, execFile, spawn } from 'child_process';
 import { promisify } from 'util';
+import { homedir } from 'os';
 import { createInterface } from 'readline';
 
 const execAsync = promisify(exec);
@@ -12,46 +13,102 @@ const execFileAsync = promisify(execFile);
 export class MemoryManager {
   private sqliteManager: SQLiteManager;
   private memoryDbName: string = 'memory';
+  private targetRoot: string;
+  private centralDbPath: string;
 
-  constructor(sqliteManager: SQLiteManager) {
+  constructor(sqliteManager: SQLiteManager, targetRoot?: string) {
     this.sqliteManager = sqliteManager;
+    this.targetRoot = targetRoot ?? process.cwd();
+    this.centralDbPath = process.env.GUARDIAN_CENTRAL_DB || path.join(process.env.HOME || homedir(), 'memory.db');
   }
 
-  async initializeMemoryDatabase(): Promise<void> {
-    // Note: Database will be created automatically when first accessed
-    const manageProjectFiles = process.env.NODE_ENV !== 'test';
-    
-    let targetRoot = process.cwd();
-    try {
-      const { stdout } = await execAsync('git rev-parse --show-toplevel 2>/dev/null');
-      targetRoot = stdout.trim();
-    } catch (e) {
-      // Not a git repository, fallback to cwd
+  setTargetRoot(targetRoot: string): void {
+    this.targetRoot = targetRoot;
+  }
+
+  private async ensureCentralSchema(): Promise<void> {
+    await this.sqliteManager.createTable(this.centralDbPath, 'entities', {
+      columns: [
+        { name: 'name', type: 'TEXT', constraints: ['PRIMARY KEY', 'NOT NULL'] },
+        { name: 'entity_type', type: 'TEXT', constraints: ['NOT NULL'] },
+        { name: 'observations', type: 'TEXT', constraints: ['NOT NULL'] },
+        { name: 'created_at', type: 'TEXT', constraints: ['NOT NULL'] },
+        { name: 'updated_at', type: 'TEXT', constraints: ['NOT NULL'] }
+      ]
+    });
+    await this.sqliteManager.createTable(this.centralDbPath, 'relations', {
+      columns: [
+        { name: 'id', type: 'INTEGER', constraints: ['PRIMARY KEY', 'AUTOINCREMENT'] },
+        { name: 'from_entity', type: 'TEXT', constraints: ['NOT NULL'] },
+        { name: 'to_entity', type: 'TEXT', constraints: ['NOT NULL'] },
+        { name: 'relation_type', type: 'TEXT', constraints: ['NOT NULL'] },
+        { name: 'created_at', type: 'TEXT', constraints: ['NOT NULL'] }
+      ],
+      indexes: [
+        { name: 'idx_central_relations_unique', columns: ['from_entity', 'to_entity', 'relation_type'], unique: true }
+      ]
+    });
+  }
+
+  async syncToCentral(): Promise<{ entities: number; relations: number }> {
+    const graph = await this.readGraph();
+    if (graph.entities.length === 0 && graph.relations.length === 0) {
+      return { entities: 0, relations: 0 };
     }
 
-    // Pre-commit hook initialization — only in git repos with pre-commit installed
-    if (manageProjectFiles) try {
-      await execAsync('which pre-commit', { cwd: targetRoot });
-    } catch {
-      // pre-commit not installed, skip
+    await this.ensureCentralSchema();
+
+    for (const entity of graph.entities) {
+      await this.sqliteManager.executeSql(
+        this.centralDbPath,
+        `INSERT OR REPLACE INTO entities (name, entity_type, observations, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
+        [entity.name, entity.entityType, JSON.stringify(entity.observations), entity.createdAt, entity.updatedAt]
+      );
     }
+
+    for (const relation of graph.relations) {
+      await this.sqliteManager.executeSql(
+        this.centralDbPath,
+        `INSERT OR IGNORE INTO relations (from_entity, to_entity, relation_type, created_at) VALUES (?, ?, ?, ?)`,
+        [relation.from, relation.to, relation.relationType, relation.createdAt]
+      );
+    }
+
+    return { entities: graph.entities.length, relations: graph.relations.length };
+  }
+
+  private async syncToCentralSafe(): Promise<void> {
     try {
+      await this.syncToCentral();
+    } catch (err) {
+      console.warn('Central memory sync failed:', err);
+    }
+  }
+
+  async setupProjectFiles(): Promise<void> {
+    const manageProjectFiles = process.env.NODE_ENV !== 'test';
+    if (!manageProjectFiles) return;
+
+    const targetRoot = this.targetRoot;
+
+    // Pre-commit hook initialization — only on explicit request
+    try {
+      await execAsync('which pre-commit');
       await execAsync('git rev-parse --git-dir 2>/dev/null', { cwd: targetRoot });
     } catch {
-      // Not a git repository, skip pre-commit
+      throw new Error('pre-commit and a Git repository are required in the project root');
     }
+
     try {
       const preCommitConfigPath = path.join(targetRoot, '.pre-commit-config.yaml');
-      
+
       if (!fs.existsSync(preCommitConfigPath)) {
-        const hasPython = fs.existsSync(path.join(targetRoot, 'requirements.txt')) || 
-                          fs.existsSync(path.join(targetRoot, 'pyproject.toml')) || 
+        const hasPython = fs.existsSync(path.join(targetRoot, 'requirements.txt')) ||
+                          fs.existsSync(path.join(targetRoot, 'pyproject.toml')) ||
                           fs.existsSync(path.join(targetRoot, 'setup.py'));
         const hasNode = fs.existsSync(path.join(targetRoot, 'package.json'));
 
-        let repos = [];
-
-        repos.push(`  - repo: https://github.com/pre-commit/pre-commit-hooks
+        const repos = [`  - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.6.0
     hooks:
       - id: trailing-whitespace
@@ -60,7 +117,7 @@ export class MemoryManager {
       - id: check-added-large-files
         args: [--maxkb=500]
       - id: check-merge-conflict
-      - id: detect-private-key`);
+      - id: detect-private-key`];
 
         if (hasPython) {
           repos.push(`  - repo: https://github.com/psf/black
@@ -73,22 +130,7 @@ export class MemoryManager {
     rev: v0.11.0
     hooks:
       - id: ruff
-        args: [--fix]
-
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.10.0
-    hooks:
-      - id: mypy
-        args: [--ignore-missing-imports, --python-version=3.13]
-        exclude: ^(tests/|setup\\.py)
-        additional_dependencies: [types-requests]
-
-  - repo: https://github.com/PyCQA/bandit
-    rev: 1.7.9
-    hooks:
-      - id: bandit
-        args: [-c, pyproject.toml]
-        exclude: ^tests/`);
+        args: [--fix]`);
         }
 
         if (hasNode) {
@@ -120,23 +162,44 @@ export class MemoryManager {
         }
       }
     } catch (err) {
-      console.warn('Failed to enforce pre-commit hooks:', err);
+      throw new Error(`Failed to set up pre-commit hooks: ${err instanceof Error ? err.message : String(err)}`);
     }
 
-    // Gitignore initialization
-    if (manageProjectFiles) try {
+    // Gitignore initialization — append only entries that are not already ignored
+    try {
+      const guardianEntries = [
+        'memory.db',
+        'memory.db-journal',
+        '.claude/',
+        '.vscode/',
+        '.idea/',
+        '.gemini/',
+        '.cursor/',
+        '.env',
+        '.env.*',
+        '!.env.example',
+      ];
       const gitignorePath = path.join(targetRoot, '.gitignore');
-      if (fs.existsSync(gitignorePath)) {
-        const gitignoreContent = fs.readFileSync(gitignorePath, 'utf8');
-        if (!gitignoreContent.includes('memory.db')) {
-          fs.appendFileSync(gitignorePath, '\n# Project Guardian\nmemory.db\nmemory.db-journal\n', 'utf8');
+      const existing = fs.existsSync(gitignorePath) ? fs.readFileSync(gitignorePath, 'utf8') : '';
+      const missing = guardianEntries.filter(entry => !existing.split(/\r?\n/).some(line => line.trim() === entry));
+      if (missing.length > 0) {
+        const block = `\n# Project Guardian\n${missing.join('\n')}\n`;
+        if (!fs.existsSync(gitignorePath)) {
+          fs.writeFileSync(gitignorePath, `# Project Guardian\n${guardianEntries.join('\n')}\n`, 'utf8');
+        } else {
+          fs.appendFileSync(gitignorePath, block, 'utf8');
         }
-      } else {
-        fs.writeFileSync(gitignorePath, '# Project Guardian\nmemory.db\nmemory.db-journal\n', 'utf8');
       }
     } catch (err) {
       console.warn('Failed to update .gitignore:', err);
     }
+  }
+
+  async initializeMemoryDatabase(): Promise<void> {
+    // Note: Database will be created automatically when first accessed
+    const manageProjectFiles = process.env.NODE_ENV !== 'test';
+
+    const targetRoot = this.targetRoot;
 
     // Create entities table
     const entitiesResult = await this.sqliteManager.createTable(this.memoryDbName, 'entities', {
@@ -188,8 +251,10 @@ export class MemoryManager {
       console.warn('Failed to create entity updated index:', updatedIndexResult.error);
     }
 
-    // Scattered DB consolidation — skip for home dir (too expensive)
-    if (manageProjectFiles && targetRoot !== (process.env.HOME || '')) {
+    // Scattered DB consolidation — DESTRUCTIVE (merges nested memory.db files
+    // into the root and deletes them, destroying per-project isolation).
+    // Disabled by default; opt in with GUARDIAN_AUTO_MERGE=1.
+    if (manageProjectFiles && process.env.GUARDIAN_AUTO_MERGE === '1' && targetRoot !== (process.env.HOME || '')) {
       const rootDbPath = path.join(targetRoot, 'memory.db');
       let mergeCount = 0;
       const MAX_MERGE = 100;
@@ -271,6 +336,7 @@ export class MemoryManager {
       }
     }
 
+    if (results.length > 0) await this.syncToCentralSafe();
     return results;
   }
 
@@ -319,6 +385,7 @@ export class MemoryManager {
       }
     }
 
+    if (results.length > 0) await this.syncToCentralSafe();
     return results;
   }
 
@@ -365,6 +432,7 @@ export class MemoryManager {
       }
     }
 
+    if (results.length > 0) await this.syncToCentralSafe();
     return results;
   }
 
@@ -388,6 +456,7 @@ export class MemoryManager {
     for (const name of entityNames) {
       await this.deleteEntity(name);
     }
+    await this.syncToCentralSafe();
   }
 
   async deleteObservation(entityName: string, observations: string[]): Promise<Entity> {
@@ -433,6 +502,7 @@ export class MemoryManager {
       }
     }
 
+    if (results.length > 0) await this.syncToCentralSafe();
     return results;
   }
 
@@ -448,6 +518,7 @@ export class MemoryManager {
     for (const relation of relations) {
       await this.deleteRelation(relation.from, relation.to, relation.relationType);
     }
+    await this.syncToCentralSafe();
   }
 
   async readGraph(): Promise<KnowledgeGraph> {

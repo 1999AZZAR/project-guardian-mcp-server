@@ -13,8 +13,14 @@ import {
 import {
   AnalyzeGitChangesSchema, CacheDeleteSchema, CacheGetSchema, CacheScanSchema, CacheSetSchema,
   GetSessionContextSchema, InspectUntrustedTextSchema, ScanContainerImageSchema, ScanProjectSecretsSchema,
+  SetProjectRootSchema, SetupPreCommitSchema, SyncCentralMemorySchema,
 } from '../types.js';
 import { RuntimeCapabilities } from '../runtime/runtime-capabilities.js';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
+import { join, resolve, isAbsolute } from 'path';
+
+const execFileAsync = promisify(execFile);
 
 const toolSchemas: Record<string, z.ZodSchema> = {
   execute_sql: ExecuteSqlSchema.omit({ database: true }),
@@ -41,12 +47,15 @@ const toolSchemas: Record<string, z.ZodSchema> = {
   cache_set: CacheSetSchema,
   cache_delete: CacheDeleteSchema,
   cache_scan: CacheScanSchema,
+  set_project_root: SetProjectRootSchema,
+  setup_pre_commit: SetupPreCommitSchema,
+  sync_central_memory: SyncCentralMemorySchema,
 };
 
 const runtimeToolNames = new Set([
-  'get_session_context', 'analyze_git_changes', 'inspect_untrusted_text',
-  'scan_project_secrets', 'scan_container_image', 'cache_get', 'cache_set',
-  'cache_delete', 'cache_scan',
+  'set_project_root', 'setup_pre_commit', 'sync_central_memory', 'get_session_context',
+  'analyze_git_changes', 'inspect_untrusted_text', 'scan_project_secrets',
+  'scan_container_image', 'cache_get', 'cache_set', 'cache_delete', 'cache_scan',
 ]);
 
 export class RequestHandlers {
@@ -96,8 +105,36 @@ export class RequestHandlers {
     }
   }
 
+  private async setProjectRoot(args: { path: string }): Promise<unknown> {
+    if (!isAbsolute(args.path)) {
+      throw new Error('path must be absolute');
+    }
+
+    let workspaceRoot = resolve(args.path);
+    try {
+      const { stdout } = await execFileAsync('git', ['rev-parse', '--show-toplevel'], { cwd: workspaceRoot, timeout: 5000 });
+      const toplevel = stdout.trim();
+      if (toplevel) workspaceRoot = resolve(toplevel);
+    } catch {
+      // Not a Git repository; use the given path as the project root
+    }
+
+    await this.sqliteManager.switchDatabasesPath(workspaceRoot);
+    this.memoryManager.setTargetRoot(workspaceRoot);
+    this.runtimeCapabilities?.setWorkspaceRoot(workspaceRoot);
+    await this.memoryManager.initializeMemoryDatabase();
+
+    return {
+      projectRoot: workspaceRoot,
+      databasePath: join(workspaceRoot, 'memory.db'),
+    };
+  }
+
   private async handleRuntimeTool(name: string, args: any): Promise<unknown> {
     switch (name) {
+      case 'set_project_root': return this.setProjectRoot(args);
+      case 'setup_pre_commit': await this.memoryManager.setupProjectFiles(); return { message: 'Pre-commit configuration installed in the active project root' };
+      case 'sync_central_memory': return this.memoryManager.syncToCentral();
       case 'get_session_context': return this.runtimeCapabilities!.getSessionContext(args);
       case 'analyze_git_changes': return this.runtimeCapabilities!.analyzeGitChanges(args);
       case 'inspect_untrusted_text': return this.runtimeCapabilities!.inspectUntrustedText(args);

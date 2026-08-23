@@ -49,8 +49,8 @@ describe('ToolRegistry', () => {
       ]));
     });
 
-    test('should have exactly 27 tools', () => {
-      expect(allTools).toHaveLength(27);
+    test('should have exactly 30 tools', () => {
+      expect(allTools).toHaveLength(30);
     });
   });
 

@@ -1,6 +1,6 @@
 # Project Guardian MCP
 
-A Model Context Protocol (MCP) server for persistent project memory, knowledge-graph operations, SQLite data access, runtime security checks, and guided project-management workflows. The current registry exposes 27 tools, 11 resources, and 27 prompts.
+A Model Context Protocol (MCP) server for persistent project memory, knowledge-graph operations, SQLite data access, runtime security checks, and guided project-management workflows. The current registry exposes 30 tools, 11 resources, and 27 prompts.
 
 ![Blotcat — guardian on duty, wiring the knowledge graph from memory.db](assets/blotcat-hero.jpg)
 
@@ -18,7 +18,7 @@ A Model Context Protocol (MCP) server for persistent project memory, knowledge-g
 - [Available Tools](#available-tools)
   - [Database Operations (7 tools)](#database-operations-7-tools)
   - [Memory and Guidance Tools (11 tools)](#memory-and-guidance-tools-11-tools)
-  - [Runtime Companion Tools (9 tools)](#runtime-companion-tools-9-tools)
+  - [Runtime Companion Tools (12 tools)](#runtime-companion-tools-12-tools)
 - [AI Guidance System](#ai-guidance-system)
   - [Available Resources](#available-resources)
   - [Available Prompts](#available-prompts)
@@ -43,8 +43,9 @@ A Model Context Protocol (MCP) server for persistent project memory, knowledge-g
 - **Relationship Mapping**: Dependencies, ownership, blockers, and connections
 - **Observation Tracking**: Contextual notes and progress updates
 - **Text Search**: Case-insensitive matching across entity names, types, observations, and relations
-- **Centralized Persistence**: Stores `memory.db` at the Git root, or under `$XDG_DATA_HOME/project-guardian` outside a Git repository
-- **Optional Pre-Commit Setup**: Installs a generated configuration only when both Git and `pre-commit` are available
+- **Per-Project Memory**: Each project gets its own `memory.db`. The server resolves the project root in this order: the `GUARDIAN_PROJECT_ROOT` environment variable, then the Git toplevel of its working directory, then `$XDG_DATA_HOME/project-guardian` as a shared fallback outside any Git repository
+- **Central Memory Mirror**: Every memory write also syncs into one central database (default `~/memory.db`), giving an aggregated, searchable map across all projects and a fallback when a project database is unavailable
+- **On-Demand Pre-Commit Setup**: Nothing is installed at startup. Call `setup_pre_commit` when you want a generated `.pre-commit-config.yaml` and Git hooks in the active project
 
 ### Streamlined Database Operations
 
@@ -53,7 +54,7 @@ A Model Context Protocol (MCP) server for persistent project memory, knowledge-g
 - **Core CRUD**: Essential database operations (query, insert, update, delete)
 - **SQL Execution**: Direct SQL query execution
 - **Data Transfer**: Import/export CSV and JSON files
-- **27 Tools Total**: Seven database tools, ten memory tools, one guidance tool, and nine runtime companion tools
+- **30 Tools Total**: Seven database tools, ten memory tools, one guidance tool, and twelve runtime companion tools
 
 ### Runtime Companion Integration
 
@@ -150,7 +151,7 @@ When you pull new updates or modify the code, you must rebuild the server and re
 
 ## Available Tools
 
-This MCP server currently provides **27 tools**:
+This MCP server currently provides **30 tools**:
 
 ### Database Operations (7 tools)
 
@@ -293,7 +294,18 @@ Invoke a project guidance framework to receive specialized instructions and chec
 - `guidance_name` (required): Name of the guidance (e.g., project-setup, sprint-planning)
 - `arguments` (optional): Arguments required by the specific guidance framework
 
-### Runtime Companion Tools (9 tools)
+### Runtime Companion Tools (12 tools)
+
+#### `sync_central_memory`
+Copy the active project knowledge graph into the central memory database (`~/memory.db` by default, override with `GUARDIAN_CENTRAL_DB`). Entities are upserted and relations deduplicated, so the central database accumulates a searchable map across all projects. Every memory write also syncs automatically; call this tool to force a sync on demand.
+
+#### `set_project_root`
+Switch the active project memory database to the given absolute project path. Use this at session start when the server was launched outside the project directory, so memory is written to the project instead of the shared fallback database.
+
+- `path` (required): Absolute path to the project root. Inside a Git repository, the toplevel is used.
+
+#### `setup_pre_commit`
+Create a `.pre-commit-config.yaml` in the active project root and install the Git hooks, on demand. Requires `pre-commit` to be installed. The generated `.gitignore` entries are intentionally broad: alongside `memory.db`, the block ignores common local tool directories such as `.claude/`, `.vscode/`, `.idea/`, `.gemini/`, and `.cursor/`, plus `.env` files. Entries already present in `.gitignore` are never duplicated. The server never does any of this automatically at startup.
 
 #### `get_session_context`
 Summarize active tasks, open bugs, recent changes, blockers, and the next suggested action directly from the knowledge graph.
@@ -699,6 +711,23 @@ const importResult = await mcpClient.callTool('import_data', {
 
 ## Configuration
 
+### Environment Variables
+
+The server reads these variables at startup:
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `GUARDIAN_PROJECT_ROOT` | unset | Absolute path to the project root. When set, `memory.db` is stored here instead of relying on Git detection |
+| `GUARDIAN_CENTRAL_DB` | `~/memory.db` | Absolute path to the central memory database that every project syncs into |
+| `GUARDIAN_AUTO_MERGE` | unset | Set to `1` to enable scattered-database consolidation at startup. This merges nested `memory.db` files into the project-root database and deletes them, so leave it unset when sub-projects keep separate memories |
+| `REDIS_URL` | unset | Enables the Redis-backed `cache_*` tools |
+| `XDG_DATA_HOME` | platform default | Base directory for the shared fallback database outside a Git repository |
+
+MCP clients launch servers with their own working directory, which is often your home folder rather than the project you are editing. In that situation Git detection cannot find the project and every session writes to the shared fallback database. Two ways to fix this:
+
+1. Set `GUARDIAN_PROJECT_ROOT` in the project's MCP configuration (see the client examples below).
+2. Call the `set_project_root` tool with the absolute project path at session start — no configuration edits needed. The switch applies to the running server; set the environment variable if you want it to apply automatically to every future session.
+
 ### Optional Runtime Services
 
 Redis is optional and is never contacted during startup. Configure it only when cache tools are needed:
@@ -717,7 +746,7 @@ The companion catalog reports `available`, `optional`, or `unavailable` for each
 
 ### For Cursor IDE
 
-Add this server to your Cursor MCP configuration (`~/.cursor/mcp.json`):
+Add this server to your Cursor MCP configuration (`~/.cursor/mcp.json`). Replace the `GUARDIAN_PROJECT_ROOT` value with the project this configuration belongs to:
 
 ```json
 {
@@ -725,7 +754,9 @@ Add this server to your Cursor MCP configuration (`~/.cursor/mcp.json`):
     "project-guardian": {
       "command": "node",
       "args": ["/path/to/project-guardian-mcp-server/dist/index.js"],
-      "env": {}
+      "env": {
+        "GUARDIAN_PROJECT_ROOT": "/path/to/your/project"
+      }
     }
   }
 }
@@ -733,7 +764,7 @@ Add this server to your Cursor MCP configuration (`~/.cursor/mcp.json`):
 
 ### For Claude Desktop
 
-Add this server to your Claude Desktop configuration (`claude_desktop_config.json`):
+Add this server to your Claude Desktop configuration (`claude_desktop_config.json`), following the same pattern:
 
 ```json
 {
@@ -741,7 +772,9 @@ Add this server to your Claude Desktop configuration (`claude_desktop_config.jso
     "project-guardian": {
       "command": "node",
       "args": ["/path/to/project-guardian-mcp-server/dist/index.js"],
-      "env": {}
+      "env": {
+        "GUARDIAN_PROJECT_ROOT": "/path/to/your/project"
+      }
     }
   }
 }
@@ -802,7 +835,7 @@ project-guardian-mcp-server/
 
 - **server.ts**: MCP server lifecycle, transport, handlers, and shutdown coordination
 - **handlers/request-handlers.ts**: Central dispatcher routing tool calls to appropriate managers
-- **tools/**: Tool definition and registration system (27 tools total)
+- **tools/**: Tool definition and registration system (30 tools total)
   - `tool-registry.ts`: Lists all available tools
   - `database-tools.ts`: Database operation schemas (7 tools)
   - `memory-tools.ts`: Memory management schemas (10 tools)
@@ -826,7 +859,7 @@ project-guardian-mcp-server/
 
 ### Local State
 
-`memory.db` and its `memory.db-*` sidecars are runtime state and are ignored by Git. A clone starts with no project memory; the server creates the database and schema locally on first run. Back up or export memory explicitly when it must move between machines. Never commit the database because observations can contain private project context.
+`memory.db` and its `memory.db-*` sidecars are runtime state and are ignored by Git. Each project keeps its own database at its resolved project root (see [Environment Variables](#environment-variables)); projects outside any Git repository without an explicit root share the fallback database under `$XDG_DATA_HOME/project-guardian`. In addition, every memory write mirrors into the central database (default `~/memory.db`), which is a merge across projects: deleting an entity in one project does not remove it from the central copy, so treat the central database as a searchable aggregate rather than a per-project backup. A clone starts with no project memory; the server creates the database and schema locally on first run. Back up or export memory explicitly when it must move between machines. Never commit the database because observations can contain private project context.
 
 ## Development
 

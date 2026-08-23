@@ -1,7 +1,7 @@
 import sqlite3 from 'sqlite3';
 import { promisify } from 'util';
 import { readFileSync, writeFileSync, existsSync, statSync, mkdirSync, openSync, closeSync } from 'fs';
-import { join } from 'path';
+import { join, isAbsolute } from 'path';
 import { 
   DatabaseInfo, 
   TableInfo, 
@@ -40,7 +40,19 @@ export class SQLiteManager {
     }
   }
 
+  async switchDatabasesPath(newPath: string): Promise<void> {
+    await this.closeAllConnections();
+    this.databasesPath = newPath;
+    this.ensureDatabasesDirectory();
+    this.initializeDefaultDatabase();
+  }
+
+  getDatabasesPath(): string {
+    return this.databasesPath;
+  }
+
   private getDatabasePath(name: string): string {
+    if (isAbsolute(name)) return name;
     return join(this.databasesPath, `${name}.db`);
   }
 

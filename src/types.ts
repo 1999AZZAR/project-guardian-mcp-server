@@ -272,6 +272,14 @@ export const CacheScanSchema = z.object({
   count: z.number().int().min(1).max(200).default(100),
 }).strict();
 
+export const SetProjectRootSchema = z.object({
+  path: z.string().min(1).max(4096),
+}).strict();
+
+export const SetupPreCommitSchema = z.object({}).strict();
+
+export const SyncCentralMemorySchema = z.object({}).strict();
+
 export type GetSessionContextInput = z.infer<typeof GetSessionContextSchema>;
 export type AnalyzeGitChangesInput = z.infer<typeof AnalyzeGitChangesSchema>;
 export type InspectUntrustedTextInput = z.infer<typeof InspectUntrustedTextSchema>;
