@@ -401,6 +401,8 @@ export class MemoryManager {
         console.warn('Scattered DB scan failed:', e);
       }
     }
+
+    await this.syncToCentralSafe();
   }
 
   async createEntity(name: string, entityType: string, observations: string[]): Promise<Entity> {
