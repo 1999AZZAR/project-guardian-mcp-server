@@ -5,7 +5,7 @@ const object = (properties: Record<string, object>, required: string[] = []) => 
 });
 
 export const runtimeTools: Tool[] = [
-  { name: 'sync_central_memory', description: 'Sync the active project knowledge graph into the central memory database (~/memory.db by default) so all projects share one searchable map', inputSchema: object({}) },
+  { name: 'sync_central_memory', description: 'Sync the active project knowledge graph into the central memory database (~/memory/memory.db by default) so all projects share one searchable map', inputSchema: object({}) },
   { name: 'set_project_root', description: 'Switch the active project memory database to the given absolute project path. Use at session start when the server was launched outside the project directory', inputSchema: object({ path: { type: 'string', description: 'Absolute path to the project root', pattern: '^/' } }, ['path']) },
   { name: 'setup_pre_commit', description: 'Create a .pre-commit-config.yaml in the active project root and install the Git hooks, on demand. Requires pre-commit to be installed', inputSchema: object({}) },
   { name: 'get_session_context', description: 'Summarize active tasks, open bugs, recent changes, and blockers from project memory', inputSchema: object({ limit: { type: 'integer', minimum: 1, maximum: 50, default: 10 } }) },

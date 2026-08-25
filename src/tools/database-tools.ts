@@ -89,9 +89,9 @@ export const databaseTools: Tool[] = [
         options: {
           type: 'object',
           properties: {
-        database: { type: 'string', enum: ['project', 'central'], description: "Target store: active project database or central aggregate", default: 'project' },
             delimiter: { type: 'string', description: 'CSV delimiter' },
             hasHeader: { type: 'boolean', description: 'CSV has header row' },
+            encoding: { type: 'string', description: 'File encoding' },
           },
         },
       },
@@ -112,9 +112,9 @@ export const databaseTools: Tool[] = [
         options: {
           type: 'object',
           properties: {
-        database: { type: 'string', enum: ['project', 'central'], description: "Target store: active project database or central aggregate", default: 'project' },
             delimiter: { type: 'string', description: 'CSV delimiter' },
             includeHeader: { type: 'boolean', description: 'Include header in CSV' },
+            encoding: { type: 'string', description: 'File encoding' },
           },
         },
       },
