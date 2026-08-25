@@ -1,27 +1,27 @@
 import { z } from 'zod';
 
 // Database types
-export const DatabaseTypeSchema = z.enum(['sqlite', 'postgresql', 'mysql', 'mongodb']);
-export type DatabaseType = z.infer<typeof DatabaseTypeSchema>;
+const DatabaseTypeSchema = z.enum(['sqlite', 'postgresql', 'mysql', 'mongodb']);
+type DatabaseType = z.infer<typeof DatabaseTypeSchema>;
 
 // Database operations schemas
-export const CreateDatabaseSchema = z.object({
+const CreateDatabaseSchema = z.object({
   name: z.string().min(1).max(255),
   type: DatabaseTypeSchema.default('sqlite'),
   path: z.string().optional(), // For SQLite file path
 });
 
-export const ListDatabasesSchema = z.object({
+const ListDatabasesSchema = z.object({
   type: DatabaseTypeSchema.optional(),
 });
 
-export const DropDatabaseSchema = z.object({
+const DropDatabaseSchema = z.object({
   name: z.string().min(1),
   type: DatabaseTypeSchema.default('sqlite'),
 });
 
 // Table operations schemas
-export const CreateTableSchema = z.object({
+const CreateTableSchema = z.object({
   database: z.string().min(1),
   name: z.string().min(1).max(255),
   schema: z.object({
@@ -40,16 +40,16 @@ export const CreateTableSchema = z.object({
   }),
 });
 
-export const ListTablesSchema = z.object({
+const ListTablesSchema = z.object({
   database: z.string().min(1),
 });
 
-export const DescribeTableSchema = z.object({
+const DescribeTableSchema = z.object({
   database: z.string().min(1),
   table: z.string().min(1),
 });
 
-export const DropTableSchema = z.object({
+const DropTableSchema = z.object({
   database: z.string().min(1),
   table: z.string().min(1),
 });
@@ -84,7 +84,7 @@ export const DeleteDataSchema = z.object({
   conditions: z.record(z.any()),
 });
 
-export const CountRecordsSchema = z.object({
+const CountRecordsSchema = z.object({
   database: z.string().min(1),
   table: z.string().min(1),
   conditions: z.record(z.any()).optional(),
@@ -122,18 +122,18 @@ export const ExportToFileSchema = z.object({
   }).optional(),
 });
 
-export const BackupDatabaseSchema = z.object({
+const BackupDatabaseSchema = z.object({
   database: z.string().min(1),
   backupPath: z.string().min(1),
 });
 
-export const RestoreDatabaseSchema = z.object({
+const RestoreDatabaseSchema = z.object({
   backupPath: z.string().min(1),
   databaseName: z.string().min(1),
 });
 
 // Memory Management schemas
-export const CreateEntitySchema = z.object({
+const CreateEntitySchema = z.object({
   name: z.string().min(1),
   entityType: z.string().min(1),
   observations: z.array(z.string()).min(1),
@@ -147,7 +147,7 @@ export const CreateEntitiesSchema = z.object({
   })).min(1),
 });
 
-export const CreateRelationSchema = z.object({
+const CreateRelationSchema = z.object({
   from: z.string().min(1),
   to: z.string().min(1),
   relationType: z.string().min(1),
@@ -161,7 +161,7 @@ export const CreateRelationsSchema = z.object({
   })).min(1),
 });
 
-export const AddObservationSchema = z.object({
+const AddObservationSchema = z.object({
   entityName: z.string().min(1),
   contents: z.array(z.string()).min(1),
 });
@@ -173,7 +173,7 @@ export const AddObservationsSchema = z.object({
   })).min(1),
 });
 
-export const DeleteEntitySchema = z.object({
+const DeleteEntitySchema = z.object({
   entityName: z.string().min(1),
 });
 
@@ -181,7 +181,7 @@ export const DeleteEntitiesSchema = z.object({
   entityNames: z.array(z.string()).min(1),
 });
 
-export const DeleteObservationSchema = z.object({
+const DeleteObservationSchema = z.object({
   entityName: z.string().min(1),
   observations: z.array(z.string()).min(1),
 });
@@ -193,7 +193,7 @@ export const DeleteObservationsSchema = z.object({
   })).min(1),
 });
 
-export const DeleteRelationSchema = z.object({
+const DeleteRelationSchema = z.object({
   from: z.string().min(1),
   to: z.string().min(1),
   relationType: z.string().min(1),
@@ -211,7 +211,7 @@ export const SearchNodesSchema = z.object({
   query: z.string().min(1),
 });
 
-export const OpenNodeSchema = z.object({
+const OpenNodeSchema = z.object({
   name: z.string().min(1),
 });
 
