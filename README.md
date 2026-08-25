@@ -1,6 +1,6 @@
 # Project Guardian MCP
 
-A Model Context Protocol (MCP) server for persistent project memory, knowledge-graph operations, SQLite data access, runtime security checks, and guided project-management workflows. The current registry exposes 30 tools, 11 resources, and 27 prompts.
+A Model Context Protocol (MCP) server for persistent project memory, knowledge-graph operations, SQLite data access, runtime security checks, and guided project-management workflows. The current registry exposes 31 tools, 11 resources, and 27 prompts.
 
 ![Blotcat — guardian on duty, wiring the knowledge graph from memory.db](assets/blotcat-hero.jpg)
 
@@ -18,7 +18,7 @@ A Model Context Protocol (MCP) server for persistent project memory, knowledge-g
 - [Available Tools](#available-tools)
   - [Database Operations (7 tools)](#database-operations-7-tools)
   - [Memory and Guidance Tools (11 tools)](#memory-and-guidance-tools-11-tools)
-  - [Runtime Companion Tools (12 tools)](#runtime-companion-tools-12-tools)
+  - [Runtime Companion Tools (13 tools)](#runtime-companion-tools-12-tools)
 - [AI Guidance System](#ai-guidance-system)
   - [Available Resources](#available-resources)
   - [Available Prompts](#available-prompts)
@@ -44,11 +44,13 @@ A Model Context Protocol (MCP) server for persistent project memory, knowledge-g
 - **Entity Management**: Projects, tasks, people, resources with rich metadata
 - **Relationship Mapping**: Dependencies, ownership, blockers, and connections
 - **Observation Tracking**: Contextual notes and progress updates
-- **Text Search**: Case-insensitive matching across entity names, types, observations, and relations
+- **Semantic Search**: Fast, localized RAG matching via SQLite's native FTS5 extension (`MATCH` and `bm25()` ranking) across entity names, types, and observations
 - **Per-Project Memory**: Each project gets its own `memory.db`. The server resolves the project root in this order: the `GUARDIAN_PROJECT_ROOT` environment variable, then the Git toplevel of its working directory, then `$XDG_DATA_HOME/project-guardian` as a shared fallback outside any Git repository
 - **Central Memory Mirror**: Every memory write also syncs into one central database at `~/memory/memory.db`, giving an aggregated, searchable map across all projects and a fallback when a project database is unavailable. Reads through `read_graph` and `search_nodes` merge both stores, with project entries taking precedence
 - **Daily Central Backups**: On the first sync of each day, the central database is snapshotted to `~/memory/backup/ddmmyyyy_memory.db`; the seven most recent backups are kept and older ones pruned automatically. On first run, a legacy `~/memory.db` in the home directory is migrated into the new layout and used to seed the first backup
 - **On-Demand Pre-Commit Setup**: Nothing is installed at startup. Call `setup_pre_commit` when you want a generated `.pre-commit-config.yaml` and Git hooks in the active project
+
+- **On-Demand Web UI**: Launch a terminal-themed interactive node graph via `start_ui` to visually pan, search, and explore the project state directly in your browser without wasting background resources.
 
 ### Streamlined Database Operations
 
@@ -156,7 +158,7 @@ When you pull new updates or modify the code, you must rebuild the server and re
 
 ![Blotcat opening a large toolbox with three labeled drawers, holding a wrench](assets/blotcat-tool-categories.jpg)
 
-This MCP server currently provides **30 tools**:
+This MCP server currently provides **31 tools**:
 
 ### Database Operations (7 tools)
 
@@ -308,7 +310,10 @@ Invoke a project guidance framework to receive specialized instructions and chec
 - `guidance_name` (required): Name of the guidance (e.g., project-setup, sprint-planning)
 - `arguments` (optional): Arguments required by the specific guidance framework
 
-### Runtime Companion Tools (12 tools)
+### Runtime Companion Tools (13 tools)
+
+#### `start_ui`
+Start the on-demand Project Guardian Web UI server to visually browse the knowledge graph in your browser. It automatically finds a free port and returns the local HTTP URL.
 
 #### `sync_central_memory`
 Copy the active project knowledge graph into the central memory database (`~/memory/memory.db` by default, override with `GUARDIAN_CENTRAL_DB`). Entities are upserted and relations deduplicated, so the central database accumulates a searchable map across all projects. Every memory write also syncs automatically; call this tool to force a sync on demand. The first sync of each day also snapshots the central database and prunes old backups beyond the newest seven.
@@ -851,7 +856,7 @@ project-guardian-mcp-server/
 
 - **server.ts**: MCP server lifecycle, transport, handlers, and shutdown coordination
 - **handlers/request-handlers.ts**: Central dispatcher routing tool calls to appropriate managers
-- **tools/**: Tool definition and registration system (30 tools total)
+- **tools/**: Tool definition and registration system (31 tools total)
   - `tool-registry.ts`: Lists all available tools
   - `database-tools.ts`: Database operation schemas (7 tools)
   - `memory-tools.ts`: Memory management schemas (10 tools)
