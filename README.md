@@ -808,9 +808,10 @@ project-guardian-mcp-server/
 ├── src/
 │   ├── index.ts              # Main entry point
 │   ├── server.ts             # MCP server orchestrator
-│   ├── memory-manager.ts     # Knowledge graph and entity management
+│   ├── memory-manager.ts     # Knowledge graph and FTS5 RAG semantic search
 │   ├── sqlite-manager.ts     # Database operations and connection management
 │   ├── import-export.ts      # CSV/JSON data import and export functionality
+│   ├── ui-manager.ts         # On-Demand Web UI server and port finder
 │   ├── types.ts              # TypeScript type definitions and schemas
 │   ├── handlers/
 │   │   └── request-handlers.ts # Central tool execution dispatcher
@@ -833,6 +834,12 @@ project-guardian-mcp-server/
 │       ├── prompt-definitions.ts    # Static prompt metadata
 │       ├── prompt-handlers.ts       # Dynamic prompt content generation
 │       └── behavioral-protocol.ts   # Shared Behavioral Protocol system prompt
+├── ui/                       # On-Demand Web UI frontend (Vite/React)
+│   ├── src/
+│   │   ├── App.tsx           # Main CRT-themed node graph visualization
+│   │   ├── main.tsx          # React DOM entry point
+│   │   └── index.css         # Styling, CRT scanlines, and CSS variables
+│   └── vite.config.ts        # Vite build configuration
 ├── __tests__/                # Comprehensive test suite
 │   ├── tool-registry.test.ts
 │   ├── resource-registry.test.ts
