@@ -117,6 +117,21 @@ function App() {
     if (!showObservations) setExpandedEntities(new Set());
   }, [showObservations, view]);
 
+  const [isMobile, setIsMobile] = useState(false);
+  const [mobileDismissed, setMobileDismissed] = useState(false);
+
+  useEffect(() => {
+    const check = () => {
+      const small = window.innerWidth < 1024 || window.innerHeight < 600;
+      const touch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+      const ua = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+      setIsMobile(small && (touch || ua) || window.innerWidth < 768);
+    };
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
+
   const entityCount = data.nodes.filter(n => !n.isObservation).length;
   const filteredNodes = data.nodes
     .filter(n => !n.isObservation)
@@ -129,6 +144,30 @@ function App() {
 
   return (
     <div className="app-container">
+      {isMobile && !mobileDismissed && (
+        <div className="mobile-warning-overlay">
+          <div className="mobile-warning-card">
+            <div className="mobile-warning-icon">⚠️</div>
+            <h2>DESKTOP ONLY</h2>
+            <p>Project Guardian is optimized for desktop.</p>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginTop: 8 }}>
+              For the best experience, open on a screen &gt; 1024px.<br/>
+              Mobile rendering is disabled to preserve graph readability.
+            </p>
+            <div style={{ display: 'flex', gap: 10, marginTop: 20, justifyContent: 'center' }}>
+              <button className="custom-select" style={{ padding: '8px 18px', cursor: 'pointer' }} onClick={() => setMobileDismissed(true)}>
+                CONTINUE ANYWAY
+              </button>
+              <button className="custom-select" style={{ padding: '8px 18px', cursor: 'pointer', background: 'var(--bg-canvas)', color: 'var(--text-secondary)' }} onClick={() => window.location.reload()}>
+                RELOAD
+              </button>
+            </div>
+            <p style={{ marginTop: 16, fontSize: '0.7rem', color: 'var(--text-secondary)', opacity: 0.7 }}>
+              TIP: Rotate to landscape or use desktop mode.
+            </p>
+          </div>
+        </div>
+      )}
       {/* Left Sidebar (Global Config & Metrics) */}
       <aside className="sidebar">
         <div className="sidebar-header">
