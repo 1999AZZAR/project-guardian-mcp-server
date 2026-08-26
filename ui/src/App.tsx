@@ -11,7 +11,9 @@ interface Node {
   x?: number;
   y?: number;
   isObservation?: boolean;
+  isCluster?: boolean;
   parentId?: string;
+  clusterCount?: number;
 }
 
 interface Link {
@@ -31,6 +33,7 @@ function App() {
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [showObservations, setShowObservations] = useState(false);
+  const [expandedEntities, setExpandedEntities] = useState<Set<string>>(new Set());
   const fgRef = useRef<any>(null);
 
   useEffect(() => {
@@ -61,36 +64,58 @@ function App() {
           };
         });
 
-        // Build observation orbs: one node per observation, linked to parent entity
+        // Build observation orbs: clustered by entity, expandable
         const obsNodes: Node[] = [];
         const obsLinks: Link[] = [];
         if (showObservations) {
           json.entities.forEach((e: any) => {
-            (e.observations || []).forEach((obs: string, idx: number) => {
-              const obsId = `${e.name}::obs::${idx}`;
-              const short = obs.length > 48 ? obs.slice(0, 48) + '…' : obs;
+            const obsArr: string[] = e.observations || [];
+            if (obsArr.length === 0) return;
+            const isExpanded = expandedEntities.has(e.name);
+            if (isExpanded) {
+              obsArr.forEach((obs: string, idx: number) => {
+                const obsId = `${e.name}::obs::${idx}`;
+                const short = obs.length > 48 ? obs.slice(0, 48) + '…' : obs;
+                obsNodes.push({
+                  id: obsId,
+                  name: short,
+                  group: 'observation',
+                  observations: [obs],
+                  val: 0.7,
+                  isObservation: true,
+                  parentId: e.name
+                });
+                obsLinks.push({ source: e.name, target: obsId, label: 'has_observation' });
+              });
+            } else {
+              // collapsed cluster orb
+              const clusterId = `${e.name}::obsCluster`;
+              const clusterSize = Math.min(3.5, 1.4 + Math.log2(obsArr.length + 1) * 0.6);
               obsNodes.push({
-                id: obsId,
-                name: short,
+                id: clusterId,
+                name: `${obsArr.length} obs`,
                 group: 'observation',
-                observations: [obs],
-                val: 0.7,
+                observations: obsArr,
+                val: clusterSize,
                 isObservation: true,
-                parentId: e.name
+                isCluster: true,
+                parentId: e.name,
+                clusterCount: obsArr.length
               });
-              obsLinks.push({
-                source: e.name,
-                target: obsId,
-                label: 'has_observation'
-              });
-            });
+              obsLinks.push({ source: e.name, target: clusterId, label: 'has_observation' });
+            }
           });
         }
         
         setData({ nodes: [...entityNodes, ...obsNodes], links: [...baseLinks, ...obsLinks] });
       })
       .catch((err) => console.error('Failed to load graph:', err));
-  }, [view, showObservations]);
+  }, [view, showObservations, expandedEntities]);
+
+  // Reset expanded when toggling off or switching view to avoid stale clusters
+  useEffect(() => {
+    if (!showObservations) setExpandedEntities(new Set());
+  }, [showObservations, view]);
 
   return (
     <div className="app-container">
@@ -131,8 +156,23 @@ function App() {
 
           <label className="obs-toggle" style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, fontSize: '0.85rem', cursor: 'pointer', color: 'var(--text-secondary)' }}>
             <input type="checkbox" checked={showObservations} onChange={e => setShowObservations(e.target.checked)} />
-            Show observation orbs
+            Show observation orbs {showObservations && `(${data.nodes.filter(n => n.isCluster).length} clusters / ${data.nodes.filter(n => n.isObservation && !n.isCluster).length} orbs)`}
           </label>
+          {showObservations && (
+            <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+              <button className="custom-select" style={{ flex: 1, padding: '4px 8px', fontSize: '0.75rem', cursor: 'pointer' }} onClick={() => {
+                // expand all
+                const all = new Set<string>();
+                data.nodes.filter(n => !n.isObservation).forEach(n => {
+                  if ((n.observations?.length || 0) > 0) all.add(n.id);
+                });
+                // also need to fetch from current data? use displayed nodes' parents
+                // fallback: collect from data
+                setExpandedEntities(all);
+              }}>Expand all</button>
+              <button className="custom-select" style={{ flex: 1, padding: '4px 8px', fontSize: '0.75rem', cursor: 'pointer' }} onClick={() => setExpandedEntities(new Set())}>Collapse all</button>
+            </div>
+          )}
         </div>
         
         <div className="sidebar-body">
@@ -187,8 +227,18 @@ function App() {
           graphData={data}
           nodeRelSize={4}
           nodeVal="val"
-          nodeLabel="id"
-          onNodeClick={(node: any) => setSelectedNode(node)}
+          nodeLabel={(node: any) => node.isCluster ? `${node.parentId} — ${node.clusterCount} observations (click to expand)` : node.id}
+          onNodeClick={(node: any) => {
+            if (node.isCluster && node.parentId) {
+              setExpandedEntities(prev => {
+                const next = new Set(prev);
+                if (next.has(node.parentId)) next.delete(node.parentId);
+                else next.add(node.parentId);
+                return next;
+              });
+            }
+            setSelectedNode(node);
+          }}
           linkDirectionalArrowLength={4}
           linkDirectionalArrowRelPos={1}
           linkLabel="label"
@@ -225,17 +275,40 @@ function App() {
           nodeCanvasObject={(node: any, ctx, globalScale) => {
             const isSelected = node.id === selectedNode?.id;
             const isObs = !!node.isObservation;
+            const isCluster = !!node.isCluster;
             let color: string;
             let size: number;
-            if (isObs) {
+            if (isCluster) {
+              color = isSelected ? '#FFFFFF' : 'rgba(255, 200, 0, 0.95)';
+              size = Math.max(4, node.val * 3.2);
+              // cluster: amber stacked orbs effect
+              ctx.beginPath();
+              ctx.arc(node.x + 2, node.y + 1, size * 0.9, 0, 2 * Math.PI, false);
+              ctx.fillStyle = 'rgba(255, 200, 0, 0.12)';
+              ctx.fill();
+              ctx.beginPath();
+              ctx.arc(node.x, node.y, size, 0, 2 * Math.PI, false);
+              ctx.fillStyle = isSelected ? '#FFFFFF' : 'rgba(40, 30, 0, 0.95)';
+              ctx.strokeStyle = color;
+              ctx.lineWidth = 1.8;
+              ctx.shadowColor = color;
+              ctx.shadowBlur = 12;
+              ctx.fill();
+              ctx.stroke();
+              ctx.shadowBlur = 0;
+              // count inside
+              ctx.fillStyle = color;
+              ctx.font = `bold ${Math.max(8, size * 1.1)}px VT323, monospace`;
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              ctx.fillText(String(node.clusterCount || ''), node.x, node.y);
+            } else if (isObs) {
               color = isSelected ? '#FFFFFF' : 'rgba(0, 255, 255, 0.95)';
               size = Math.max(1.5, node.val * 2.2);
-              // outer glow
               ctx.beginPath();
               ctx.arc(node.x, node.y, size + 2, 0, 2 * Math.PI, false);
               ctx.fillStyle = 'rgba(0, 255, 255, 0.15)';
               ctx.fill();
-              // core orb - hollow style with inner fill
               ctx.beginPath();
               ctx.arc(node.x, node.y, size, 0, 2 * Math.PI, false);
               ctx.fillStyle = isSelected ? '#FFFFFF' : 'rgba(20, 40, 40, 0.9)';
@@ -246,7 +319,6 @@ function App() {
               ctx.fill();
               ctx.stroke();
               ctx.shadowBlur = 0;
-              // inner dot
               ctx.beginPath();
               ctx.arc(node.x, node.y, size * 0.35, 0, 2 * Math.PI, false);
               ctx.fillStyle = color;
@@ -269,13 +341,20 @@ function App() {
             }
             
             if (globalScale > 1.5 || isSelected) {
-              const label = node.name;
-              const fontSize = isObs ? 9 / globalScale : 12 / globalScale;
-              ctx.font = `${fontSize}px VT323, monospace`;
-              ctx.textAlign = 'center';
-              ctx.textBaseline = 'top';
-              ctx.fillStyle = isSelected ? '#FFFFFF' : isObs ? 'rgba(0, 255, 255, 0.85)' : 'rgba(0, 255, 0, 0.8)';
-              ctx.fillText(label, node.x, node.y + size + (4 / globalScale));
+              if (!isCluster) {
+                const label = node.name;
+                const fontSize = isObs ? 9 / globalScale : 12 / globalScale;
+                ctx.font = `${fontSize}px VT323, monospace`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'top';
+                ctx.fillStyle = isSelected ? '#FFFFFF' : isObs ? 'rgba(0, 255, 255, 0.85)' : 'rgba(0, 255, 0, 0.8)';
+                ctx.fillText(label, node.x, node.y + size + (4 / globalScale));
+              } else if (isSelected) {
+                ctx.font = `9px VT323, monospace`;
+                ctx.fillStyle = 'rgba(255,200,0,0.9)';
+                ctx.textAlign = 'center';
+                ctx.fillText('CLICK TO EXPAND', node.x, node.y + size + 6);
+              }
             }
           }}
         />
@@ -294,10 +373,11 @@ function App() {
             </button>
           </div>
           
-          <span className="node-badge">CLASS: {selectedNode.group}{selectedNode.isObservation ? ' • ORB' : ''}</span>
+          <span className="node-badge">CLASS: {selectedNode.group}{selectedNode.isCluster ? ' • CLUSTER' : selectedNode.isObservation ? ' • ORB' : ''}</span>
           {selectedNode.isObservation && selectedNode.parentId && (
-            <div style={{ fontSize: '0.85rem', color: 'rgba(0,255,255,0.8)', marginBottom: 10 }}>
-              PARENT: {selectedNode.parentId} <button style={{ marginLeft: 6, background: 'transparent', border: '1px solid rgba(0,255,255,0.4)', color: 'rgba(0,255,255,0.9)', cursor: 'pointer', padding: '1px 6px', fontFamily: 'VT323' }} onClick={() => {
+            <div style={{ fontSize: '0.85rem', color: selectedNode.isCluster ? 'rgba(255,200,0,0.9)' : 'rgba(0,255,255,0.8)', marginBottom: 10, display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
+              <span>PARENT: {selectedNode.parentId}</span>
+              <button style={{ background: 'transparent', border: '1px solid rgba(0,255,255,0.4)', color: 'rgba(0,255,255,0.9)', cursor: 'pointer', padding: '1px 6px', fontFamily: 'VT323' }} onClick={() => {
                 const parent = data.nodes.find(n => n.id === selectedNode.parentId);
                 if (parent) {
                   setSelectedNode(parent);
@@ -307,6 +387,25 @@ function App() {
                   }
                 }
               }}>[GO TO PARENT]</button>
+              {selectedNode.isCluster && (
+                <button style={{ background: 'rgba(255,200,0,0.15)', border: '1px solid rgba(255,200,0,0.6)', color: 'rgba(255,200,0,1)', cursor: 'pointer', padding: '1px 8px', fontFamily: 'VT323' }} onClick={() => {
+                  setExpandedEntities(prev => {
+                    const next = new Set(prev);
+                    next.add(selectedNode.parentId!);
+                    return next;
+                  });
+                  // keep cluster selected? switch to parent for context
+                }}>[EXPAND {selectedNode.clusterCount} ORBS]</button>
+              )}
+            </div>
+          )}
+          {!selectedNode.isObservation && selectedNode.observations.length > 0 && showObservations && (
+            <div style={{ marginBottom: 10 }}>
+              {expandedEntities.has(selectedNode.id) ? (
+                <button style={{ background: 'rgba(255,200,0,0.12)', border: '1px solid rgba(255,200,0,0.5)', color: 'rgba(255,200,0,0.9)', cursor: 'pointer', padding: '4px 10px', fontFamily: 'VT323', fontSize: '0.85rem' }} onClick={() => setExpandedEntities(prev => { const n=new Set(prev); n.delete(selectedNode.id); return n; })}>[COLLAPSE {selectedNode.observations.length} ORBS → CLUSTER]</button>
+              ) : (
+                <button style={{ background: 'rgba(0,255,255,0.1)', border: '1px solid rgba(0,255,255,0.4)', color: 'rgba(0,255,255,0.9)', cursor: 'pointer', padding: '4px 10px', fontFamily: 'VT323', fontSize: '0.85rem' }} onClick={() => setExpandedEntities(prev => { const n=new Set(prev); n.add(selectedNode.id); return n; })}>[EXPAND → {selectedNode.observations.length} ORBS]</button>
+              )}
             </div>
           )}
           
