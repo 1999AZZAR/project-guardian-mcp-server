@@ -97,6 +97,41 @@ export class MemoryManager {
     await this.ensureFtsSchema(this.centralDbPath);
   }
 
+  private projectSchemaReady = false;
+  private async ensureProjectSchema(): Promise<void> {
+    if (this.projectSchemaReady) return;
+    // idempotent: IF NOT EXISTS handles re-entrancy, flag avoids extra I/O after warm
+    await this.sqliteManager.createTable(this.memoryDbName, 'entities', {
+      columns: [
+        { name: 'name', type: 'TEXT', constraints: ['PRIMARY KEY', 'NOT NULL'] },
+        { name: 'entity_type', type: 'TEXT', constraints: ['NOT NULL'] },
+        { name: 'observations', type: 'TEXT', constraints: ['NOT NULL'] },
+        { name: 'created_at', type: 'TEXT', constraints: ['NOT NULL'] },
+        { name: 'updated_at', type: 'TEXT', constraints: ['NOT NULL'] }
+      ]
+    });
+    await this.sqliteManager.createTable(this.memoryDbName, 'relations', {
+      columns: [
+        { name: 'id', type: 'INTEGER', constraints: ['PRIMARY KEY', 'AUTOINCREMENT'] },
+        { name: 'from_entity', type: 'TEXT', constraints: ['NOT NULL'] },
+        { name: 'to_entity', type: 'TEXT', constraints: ['NOT NULL'] },
+        { name: 'relation_type', type: 'TEXT', constraints: ['NOT NULL'] },
+        { name: 'created_at', type: 'TEXT', constraints: ['NOT NULL'] }
+      ],
+      indexes: [
+        { name: 'idx_relations_from', columns: ['from_entity'] },
+        { name: 'idx_relations_to', columns: ['to_entity'] },
+        { name: 'idx_relations_type', columns: ['relation_type'] }
+      ]
+    });
+    const r1 = await this.sqliteManager.executeSql(this.memoryDbName, 'CREATE INDEX IF NOT EXISTS idx_entities_type ON entities(entity_type)');
+    if (!r1.success) console.warn('Failed to create entity type index:', r1.error);
+    const r2 = await this.sqliteManager.executeSql(this.memoryDbName, 'CREATE INDEX IF NOT EXISTS idx_entities_updated ON entities(updated_at)');
+    if (!r2.success) console.warn('Failed to create entity updated index:', r2.error);
+    await this.ensureFtsSchema(this.memoryDbName);
+    this.projectSchemaReady = true;
+  }
+
   async syncToCentral(): Promise<{ entities: number; relations: number }> {
     const graph = await this.readStore(this.memoryDbName);
     if (graph.entities.length === 0 && graph.relations.length === 0) {
@@ -105,20 +140,29 @@ export class MemoryManager {
 
     await this.ensureCentralSchema();
 
-    for (const entity of graph.entities) {
-      await this.sqliteManager.executeSql(
-        this.centralDbPath,
-        `INSERT OR REPLACE INTO entities (name, entity_type, observations, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
-        [entity.name, entity.entityType, JSON.stringify(entity.observations), entity.createdAt, entity.updatedAt]
-      );
-    }
-
-    for (const relation of graph.relations) {
-      await this.sqliteManager.executeSql(
-        this.centralDbPath,
-        `INSERT OR IGNORE INTO relations (from_entity, to_entity, relation_type, created_at) VALUES (?, ?, ?, ?)`,
-        [relation.from, relation.to, relation.relationType, relation.createdAt]
-      );
+    // batch in single transaction — was N separate writes, now 1 fsync
+    await this.sqliteManager.executeSql(this.centralDbPath, 'BEGIN TRANSACTION');
+    try {
+      for (const entity of graph.entities) {
+        const r = await this.sqliteManager.executeSql(
+          this.centralDbPath,
+          `INSERT OR REPLACE INTO entities (name, entity_type, observations, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`,
+          [entity.name, entity.entityType, JSON.stringify(entity.observations), entity.createdAt, entity.updatedAt]
+        );
+        if (!r.success) throw new Error(r.error);
+      }
+      for (const relation of graph.relations) {
+        const r = await this.sqliteManager.executeSql(
+          this.centralDbPath,
+          `INSERT OR IGNORE INTO relations (from_entity, to_entity, relation_type, created_at) VALUES (?, ?, ?, ?)`,
+          [relation.from, relation.to, relation.relationType, relation.createdAt]
+        );
+        if (!r.success) throw new Error(r.error);
+      }
+      await this.sqliteManager.executeSql(this.centralDbPath, 'COMMIT');
+    } catch (e) {
+      try { await this.sqliteManager.executeSql(this.centralDbPath, 'ROLLBACK'); } catch {}
+      throw e;
     }
 
     await this.backupCentralIfNeeded();
@@ -354,56 +398,7 @@ export class MemoryManager {
       console.warn('Central memory initialization failed:', err);
     }
 
-    // Create entities table
-    const entitiesResult = await this.sqliteManager.createTable(this.memoryDbName, 'entities', {
-      columns: [
-        { name: 'name', type: 'TEXT', constraints: ['PRIMARY KEY', 'NOT NULL'] },
-        { name: 'entity_type', type: 'TEXT', constraints: ['NOT NULL'] },
-        { name: 'observations', type: 'TEXT', constraints: ['NOT NULL'] }, // JSON array
-        { name: 'created_at', type: 'TEXT', constraints: ['NOT NULL'] },
-        { name: 'updated_at', type: 'TEXT', constraints: ['NOT NULL'] }
-      ]
-    });
-
-    if (!entitiesResult.success) {
-      throw new Error(`Failed to create entities table: ${entitiesResult.error || entitiesResult.message}`);
-    }
-
-    // Create relations table
-    const relationsResult = await this.sqliteManager.createTable(this.memoryDbName, 'relations', {
-      columns: [
-        { name: 'id', type: 'INTEGER', constraints: ['PRIMARY KEY', 'AUTOINCREMENT'] },
-        { name: 'from_entity', type: 'TEXT', constraints: ['NOT NULL'] },
-        { name: 'to_entity', type: 'TEXT', constraints: ['NOT NULL'] },
-        { name: 'relation_type', type: 'TEXT', constraints: ['NOT NULL'] },
-        { name: 'created_at', type: 'TEXT', constraints: ['NOT NULL'] }
-      ],
-      indexes: [
-        { name: 'idx_relations_from', columns: ['from_entity'] },
-        { name: 'idx_relations_to', columns: ['to_entity'] },
-        { name: 'idx_relations_type', columns: ['relation_type'] }
-      ]
-    });
-
-    if (!relationsResult.success) {
-      throw new Error(`Failed to create relations table: ${relationsResult.error || relationsResult.message}`);
-    }
-
-    // Create indexes for better search performance
-    const typeIndexResult = await this.sqliteManager.executeSql(this.memoryDbName,
-      'CREATE INDEX IF NOT EXISTS idx_entities_type ON entities(entity_type)'
-    );
-    if (!typeIndexResult.success) {
-      console.warn('Failed to create entity type index:', typeIndexResult.error);
-    }
-
-    const updatedIndexResult = await this.sqliteManager.executeSql(this.memoryDbName,
-      'CREATE INDEX IF NOT EXISTS idx_entities_updated ON entities(updated_at)'
-    );
-    if (!updatedIndexResult.success) {
-      console.warn('Failed to create entity updated index:', updatedIndexResult.error);
-    }
-    await this.ensureFtsSchema(this.memoryDbName);
+    await this.ensureProjectSchema();
 
     // Scattered DB consolidation — DESTRUCTIVE (merges nested memory.db files
     // into the root and deletes them, destroying per-project isolation).
@@ -449,6 +444,7 @@ export class MemoryManager {
   }
 
   async createEntity(name: string, entityType: string, observations: string[]): Promise<Entity> {
+    if (!this.projectSchemaReady) await this.ensureProjectSchema();
     const now = new Date().toISOString();
 
     // Check if entity already exists
@@ -481,15 +477,23 @@ export class MemoryManager {
   }
 
   async createEntities(entities: Array<{ name: string; entityType: string; observations: string[] }>): Promise<Entity[]> {
+    if (!this.projectSchemaReady) await this.ensureProjectSchema();
     const results: Entity[] = [];
-
-    for (const entity of entities) {
-      try {
-        const created = await this.createEntity(entity.name, entity.entityType, entity.observations);
-        results.push(created);
-      } catch (error) {
-        console.error(`Failed to create entity ${entity.name}:`, error);
+    // single transaction for batch — avoids N fsyncs
+    await this.sqliteManager.executeSql(this.memoryDbName, 'BEGIN TRANSACTION');
+    try {
+      for (const entity of entities) {
+        try {
+          const created = await this.createEntity(entity.name, entity.entityType, entity.observations);
+          results.push(created);
+        } catch (error) {
+          console.error(`Failed to create entity ${entity.name}:`, error);
+        }
       }
+      await this.sqliteManager.executeSql(this.memoryDbName, 'COMMIT');
+    } catch (e) {
+      try { await this.sqliteManager.executeSql(this.memoryDbName, 'ROLLBACK'); } catch {}
+      throw e;
     }
 
     if (results.length > 0) await this.syncToCentralSafe();
@@ -497,6 +501,7 @@ export class MemoryManager {
   }
 
   async createRelation(from: string, to: string, relationType: string): Promise<Relation> {
+    if (!this.projectSchemaReady) await this.ensureProjectSchema();
     // Verify entities exist
     const fromEntity = await this.sqliteManager.queryData(this.memoryDbName, 'entities', { name: from });
     const toEntity = await this.sqliteManager.queryData(this.memoryDbName, 'entities', { name: to });
@@ -530,15 +535,22 @@ export class MemoryManager {
   }
 
   async createRelations(relations: Array<{ from: string; to: string; relationType: string }>): Promise<Relation[]> {
+    if (!this.projectSchemaReady) await this.ensureProjectSchema();
     const results: Relation[] = [];
-
-    for (const relation of relations) {
-      try {
-        const created = await this.createRelation(relation.from, relation.to, relation.relationType);
-        results.push(created);
-      } catch (error) {
-        console.error(`Failed to create relation ${relation.from} -> ${relation.to}:`, error);
+    await this.sqliteManager.executeSql(this.memoryDbName, 'BEGIN TRANSACTION');
+    try {
+      for (const relation of relations) {
+        try {
+          const created = await this.createRelation(relation.from, relation.to, relation.relationType);
+          results.push(created);
+        } catch (error) {
+          console.error(`Failed to create relation ${relation.from} -> ${relation.to}:`, error);
+        }
       }
+      await this.sqliteManager.executeSql(this.memoryDbName, 'COMMIT');
+    } catch (e) {
+      try { await this.sqliteManager.executeSql(this.memoryDbName, 'ROLLBACK'); } catch {}
+      throw e;
     }
 
     if (results.length > 0) await this.syncToCentralSafe();
@@ -546,6 +558,7 @@ export class MemoryManager {
   }
 
   async addObservation(entityName: string, contents: string[]): Promise<Entity> {
+    if (!this.projectSchemaReady) await this.ensureProjectSchema();
     // Get current entity
     const result = await this.sqliteManager.queryData(this.memoryDbName, 'entities', { name: entityName });
     if (!result.success || !result.data || result.data.rows.length === 0) {
@@ -577,15 +590,22 @@ export class MemoryManager {
   }
 
   async addObservations(observations: Array<{ entityName: string; contents: string[] }>): Promise<Entity[]> {
+    if (!this.projectSchemaReady) await this.ensureProjectSchema();
     const results: Entity[] = [];
-
-    for (const obs of observations) {
-      try {
-        const updated = await this.addObservation(obs.entityName, obs.contents);
-        results.push(updated);
-      } catch (error) {
-        console.error(`Failed to add observations to entity ${obs.entityName}:`, error);
+    await this.sqliteManager.executeSql(this.memoryDbName, 'BEGIN TRANSACTION');
+    try {
+      for (const obs of observations) {
+        try {
+          const updated = await this.addObservation(obs.entityName, obs.contents);
+          results.push(updated);
+        } catch (error) {
+          console.error(`Failed to add observations to entity ${obs.entityName}:`, error);
+        }
       }
+      await this.sqliteManager.executeSql(this.memoryDbName, 'COMMIT');
+    } catch (e) {
+      try { await this.sqliteManager.executeSql(this.memoryDbName, 'ROLLBACK'); } catch {}
+      throw e;
     }
 
     if (results.length > 0) await this.syncToCentralSafe();
@@ -593,6 +613,7 @@ export class MemoryManager {
   }
 
   async deleteEntity(entityName: string): Promise<void> {
+    if (!this.projectSchemaReady) await this.ensureProjectSchema();
     await this.sqliteManager.executeSql(this.memoryDbName, 'BEGIN TRANSACTION');
     try {
       await this.sqliteManager.deleteData(this.memoryDbName, 'relations',
@@ -616,6 +637,7 @@ export class MemoryManager {
   }
 
   async deleteObservation(entityName: string, observations: string[]): Promise<Entity> {
+    if (!this.projectSchemaReady) await this.ensureProjectSchema();
     // Get current entity
     const result = await this.sqliteManager.queryData(this.memoryDbName, 'entities', { name: entityName });
     if (!result.success || !result.data || result.data.rows.length === 0) {
@@ -647,15 +669,22 @@ export class MemoryManager {
   }
 
   async deleteObservations(deletions: Array<{ entityName: string; observations: string[] }>): Promise<Entity[]> {
+    if (!this.projectSchemaReady) await this.ensureProjectSchema();
     const results: Entity[] = [];
-
-    for (const deletion of deletions) {
-      try {
-        const updated = await this.deleteObservation(deletion.entityName, deletion.observations);
-        results.push(updated);
-      } catch (error) {
-        console.error(`Failed to delete observations from entity ${deletion.entityName}:`, error);
+    await this.sqliteManager.executeSql(this.memoryDbName, 'BEGIN TRANSACTION');
+    try {
+      for (const deletion of deletions) {
+        try {
+          const updated = await this.deleteObservation(deletion.entityName, deletion.observations);
+          results.push(updated);
+        } catch (error) {
+          console.error(`Failed to delete observations from entity ${deletion.entityName}:`, error);
+        }
       }
+      await this.sqliteManager.executeSql(this.memoryDbName, 'COMMIT');
+    } catch (e) {
+      try { await this.sqliteManager.executeSql(this.memoryDbName, 'ROLLBACK'); } catch {}
+      throw e;
     }
 
     if (results.length > 0) await this.syncToCentralSafe();

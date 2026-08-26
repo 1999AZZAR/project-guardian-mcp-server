@@ -371,10 +371,18 @@ export class SQLiteManager {
       const sql = `INSERT INTO ${tableName} (${columns.join(', ')}) VALUES (${placeholders})`;
       
       let insertedCount = 0;
-      for (const record of records) {
-        const values = columns.map(col => record[col]);
-        await this.runQuery(db, sql, values);
-        insertedCount++;
+      const useTransaction = records.length > 1;
+      if (useTransaction) await this.runQuery(db, 'BEGIN TRANSACTION');
+      try {
+        for (const record of records) {
+          const values = columns.map(col => record[col]);
+          await this.runQuery(db, sql, values);
+          insertedCount++;
+        }
+        if (useTransaction) await this.runQuery(db, 'COMMIT');
+      } catch (e) {
+        if (useTransaction) try { await this.runQuery(db, 'ROLLBACK'); } catch {}
+        throw e;
       }
       
       const executionTime = Date.now() - startTime;
