@@ -1,0 +1,4 @@
+interface:
+  display_name: "Guardian Session"
+  short_description: "Restore relevant context from Project Guardian memory."
+  default_prompt: "Load the relevant project context and identify the next actionable task."

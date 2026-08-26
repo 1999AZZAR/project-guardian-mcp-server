@@ -1,7 +1,7 @@
 import sqlite3 from 'sqlite3';
 import { promisify } from 'util';
-import { readFileSync, writeFileSync, existsSync, statSync, mkdirSync } from 'fs';
-import { join } from 'path';
+import { readFileSync, writeFileSync, existsSync, statSync, mkdirSync, openSync, closeSync } from 'fs';
+import { join, isAbsolute } from 'path';
 import { 
   DatabaseInfo, 
   TableInfo, 
@@ -15,6 +15,7 @@ export class SQLiteManager {
   private connections: Map<string, sqlite3.Database> = new Map();
   private databasesPath: string;
   private defaultDatabaseName: string = 'memory';
+  private readonly MAX_CONNECTIONS = 20;
 
   constructor(databasesPath: string = './databases') {
     this.databasesPath = databasesPath;
@@ -28,30 +29,49 @@ export class SQLiteManager {
     }
   }
 
-  private async initializeDefaultDatabase(): Promise<void> {
+  private initializeDefaultDatabase(): void {
     try {
       const dbPath = this.getDatabasePath(this.defaultDatabaseName);
       if (!existsSync(dbPath)) {
-        // Create the default memory database
-        const db = new sqlite3.Database(dbPath);
-        await this.closeConnection(this.defaultDatabaseName);
+        closeSync(openSync(dbPath, 'a'));
       }
     } catch (error) {
       console.error('Failed to initialize default database:', error);
     }
   }
 
+  async switchDatabasesPath(newPath: string): Promise<void> {
+    await this.closeAllConnections();
+    this.databasesPath = newPath;
+    this.ensureDatabasesDirectory();
+    this.initializeDefaultDatabase();
+  }
+
+  getDatabasesPath(): string {
+    return this.databasesPath;
+  }
+
   private getDatabasePath(name: string): string {
+    if (isAbsolute(name)) return name;
     return join(this.databasesPath, `${name}.db`);
   }
 
   private async getConnection(name: string): Promise<sqlite3.Database> {
-    if (!this.connections.has(name)) {
-      const dbPath = this.getDatabasePath(name);
-      const db = new sqlite3.Database(dbPath);
-      this.connections.set(name, db);
+    if (this.connections.has(name)) {
+      return this.connections.get(name)!;
     }
-    return this.connections.get(name)!;
+    if (this.connections.size >= this.MAX_CONNECTIONS) {
+      for (const [key] of this.connections) {
+        if (key !== this.defaultDatabaseName) {
+          await this.closeConnection(key);
+          break;
+        }
+      }
+    }
+    const dbPath = this.getDatabasePath(name);
+    const db = new sqlite3.Database(dbPath);
+    this.connections.set(name, db);
+    return db;
   }
 
   async createDatabase(name: string): Promise<DatabaseOperationResult> {
@@ -68,8 +88,10 @@ export class SQLiteManager {
       }
 
       const db = new sqlite3.Database(dbPath);
-      await this.closeConnection(name);
-      
+      await new Promise<void>((resolve, reject) => {
+        db.close((err) => (err ? reject(err) : resolve()));
+      });
+
       const executionTime = Date.now() - startTime;
       return {
         success: true,
@@ -213,6 +235,7 @@ export class SQLiteManager {
         executionTime
       };
     } catch (error) {
+      console.error(`Failed to create table '${tableName}':`, error);
       return {
         success: false,
         message: `Failed to create table '${tableName}'`,
@@ -386,14 +409,16 @@ export class SQLiteManager {
       let sql = `SELECT * FROM ${tableName}`;
       const params: any[] = [];
       
-      if (conditions) {
+      if (conditions && Object.keys(conditions).length > 0) {
         const whereClause = Object.keys(conditions).map(key => `${key} = ?`).join(' AND ');
         sql += ` WHERE ${whereClause}`;
         params.push(...Object.values(conditions));
       }
       
       if (orderBy) {
-        sql += ` ORDER BY ${orderBy} ${orderDirection || 'ASC'}`;
+        const sanitized = orderBy.replace(/[^a-zA-Z0-9_]/g, '');
+        const dir = orderDirection === 'DESC' ? 'DESC' : 'ASC';
+        sql += ` ORDER BY ${sanitized} ${dir}`;
       }
       
       if (limit) {
@@ -622,6 +647,10 @@ export class SQLiteManager {
 
   // Helper methods
   private async query(db: sqlite3.Database, sql: string, params: any[] = []): Promise<QueryResult> {
+    const trimmed = sql.trim().toUpperCase();
+    if (trimmed.startsWith('SELECT') && !trimmed.includes('LIMIT')) {
+      sql += ' LIMIT 10000';
+    }
     return new Promise((resolve, reject) => {
       const startTime = Date.now();
       

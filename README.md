@@ -1,26 +1,87 @@
 # Project Guardian MCP
 
-A focused Model Context Protocol (MCP) server designed as your project's memory system and workflow guardian. This server provides streamlined database operations and advanced knowledge graph capabilities for intelligent project management, with exactly 17 tools, 10 resources, and 27 prompts to maintain clarity and focus.
+A Model Context Protocol (MCP) server for persistent project memory, knowledge-graph operations, SQLite data access, runtime security checks, and guided project-management workflows. The current registry exposes 31 tools, 11 resources, and 27 prompts.
+
+![Blotcat — guardian on duty, wiring the knowledge graph from memory.db](assets/blotcat-hero.jpg)
+
+## Table of Contents
+
+- [Features](#features)
+  - [Project Guardian Memory System](#project-guardian-memory-system)
+  - [Streamlined Database Operations](#streamlined-database-operations)
+  - [Runtime Companion Integration](#runtime-companion-integration)
+  - [AI Guidance System](#ai-guidance-system)
+  - [Advanced Features](#advanced-features)
+  - [Enterprise Features](#enterprise-features)
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Available Tools](#available-tools)
+  - [Database Operations (7 tools)](#database-operations-7-tools)
+  - [Memory and Guidance Tools (11 tools)](#memory-and-guidance-tools-11-tools)
+  - [Runtime Companion Tools (13 tools)](#runtime-companion-tools-12-tools)
+- [AI Guidance System](#ai-guidance-system)
+  - [Available Resources](#available-resources)
+  - [Available Prompts](#available-prompts)
+  - [How AI Models Use Guidance](#how-ai-models-use-guidance)
+- [Usage Examples](#usage-examples)
+  - [Project Guardian Setup](#project-guardian-setup)
+  - [Project Management Workflow](#project-management-workflow)
+  - [Database Operations](#database-operations)
+- [Configuration](#configuration)
+  - [Optional Runtime Services](#optional-runtime-services)
+  - [For Cursor IDE](#for-cursor-ide)
+  - [For Claude Desktop](#for-claude-desktop)
+- [Project Structure](#project-structure)
+- [Development](#development)
+- [License](#license)
 
 ## Features
 
 ### Project Guardian Memory System
+
+![Blotcat pouring a small project memory bucket into a large central memory vat](assets/blotcat-memory-sync.jpg)
 - **Knowledge Graph**: Maintain project entities, relationships, and observations
 - **Entity Management**: Projects, tasks, people, resources with rich metadata
 - **Relationship Mapping**: Dependencies, ownership, blockers, and connections
 - **Observation Tracking**: Contextual notes and progress updates
-- **Semantic Search**: Full-text search across all project knowledge
-- **Memory Persistence**: Automatic persistence in SQLite database
+- **Semantic Search**: Fast, localized RAG matching via SQLite's native FTS5 extension (`MATCH` and `bm25()` ranking) across entity names, types, and observations
+- **Per-Project Memory**: Each project gets its own `memory.db`. The server resolves the project root in this order: the `GUARDIAN_PROJECT_ROOT` environment variable, then the Git toplevel of its working directory, then `$XDG_DATA_HOME/project-guardian` as a shared fallback outside any Git repository
+- **Central Memory Mirror**: Every memory write also syncs into one central database at `~/memory/memory.db`, giving an aggregated, searchable map across all projects and a fallback when a project database is unavailable. Reads through `read_graph` and `search_nodes` merge both stores, with project entries taking precedence
+- **Daily Central Backups**: On the first sync of each day, the central database is snapshotted to `~/memory/backup/ddmmyyyy_memory.db`; the seven most recent backups are kept and older ones pruned automatically. On first run, a legacy `~/memory.db` in the home directory is migrated into the new layout and used to seed the first backup
+- **On-Demand Pre-Commit Setup**: Nothing is installed at startup. Call `setup_pre_commit` when you want a generated `.pre-commit-config.yaml` and Git hooks in the active project
+
+- **On-Demand Web UI**: Launch a terminal-themed interactive node graph via `start_ui` to visually pan, search, and explore the project state directly in your browser without wasting background resources.
 
 ### Streamlined Database Operations
-- **Single Database**: Uses only `memory.db` for all operations
+
+![Blotcat efficiently sorting raw data blocks on a conveyor belt into the structured memory.db SQLite wall](assets/blotcat-db-ops.jpg)
+- **Two Stores, One Interface**: Every project uses its own `memory.db`; all seven database tools can also address the central aggregate with `database: "central"`
 - **Core CRUD**: Essential database operations (query, insert, update, delete)
 - **SQL Execution**: Direct SQL query execution
 - **Data Transfer**: Import/export CSV and JSON files
-- **17 Tools Total**: Focused toolset for maximum clarity
+- **30 Tools Total**: Seven database tools, ten memory tools, one guidance tool, and twelve runtime companion tools
+
+### Runtime Companion Integration
+
+![Blotcat acting as a conductor for miniature sub-Blotcats acting as security, memory, and tracker companions](assets/blotcat-companions.jpg)
+
+The repository includes six `guardian-*` AgentSkills and exposes their operational capabilities through typed MCP tools:
+
+| Companion | Runtime role | MCP surface |
+| --- | --- | --- |
+| `guardian-memory` | Persistent entities, relations, and observations | Ten memory tools |
+| `guardian-session` | Active-task, bug, blocker, and recent-change summaries | `get_session_context` |
+| `guardian-tracker` | Bounded Git diff and untracked-file analysis | `analyze_git_changes` |
+| `guardian-wall` | Untrusted-text normalization and prompt-injection detection | `inspect_untrusted_text` |
+| `guardian-security` | Secret scanning and Trivy image scanning | `scan_project_secrets`, `scan_container_image` |
+| `guardian-cache` | Optional namespaced Redis storage | Four `cache_*` tools |
+
+AgentSkills provide host-side workflows and instructions. The MCP runtime implements the corresponding operations directly in TypeScript, except container scanning, which invokes Trivy as a bounded external process. No generic script or shell execution tool is exposed.
 
 ### AI Guidance System
-- **10 Resources**: Templates, best practices, cached data, and comprehensive project status
+
+![Blotcat as an academic master pointing at a glowing scroll of strict rules and project prompts](assets/blotcat-ai-guidance.jpg)
+- **11 Resources**: Templates, best practices, project status, and companion capability health
 - **27 Prompts**: Comprehensive pre-built workflows for all aspects of project management
 - **Expert Guidance**: Step-by-step instructions for complex operations
 - **Contextual Help**: Adaptive prompts based on user needs
@@ -29,22 +90,24 @@ A focused Model Context Protocol (MCP) server designed as your project's memory 
 ### Advanced Features
 - **Schema Validation**: Comprehensive input validation with Zod schemas
 - **Error Handling**: Detailed error messages and graceful failure handling
-- **Connection Management**: Automatic connection pooling and cleanup
-- **File Integration**: Seamless integration with filesystem operations
-- **Performance**: Optimized for large datasets and batch operations
+- **Connection Management**: Bounded 20-connection LRU cache with shutdown cleanup
+- **File Integration**: CSV and SQL imports are streamed; CSV writes use bounded string assembly
+- **Result Limits**: Unbounded raw `SELECT` queries are capped at 10,000 rows
 
 ### Enterprise Features
 - **TypeScript**: Fully typed with comprehensive error handling
 - **Input Validation**: Zod schema validation for all parameters
 - **Error Recovery**: Graceful error handling with detailed error messages
 - **Resource Management**: Automatic cleanup of connections and resources
-- **Testing**: Comprehensive Jest test suite with high coverage
+- **Testing**: Eight Jest suites with 83 passing tests
 
 ## Requirements
 
 - **Node.js**: >= 18.0.0
 - **npm**: Latest stable version
 - **SQLite3**: Automatically installed as dependency
+- **Redis**: Optional; required only for `cache_*` tools through `REDIS_URL`
+- **Trivy**: Optional; required only for `scan_container_image`
 
 ## Installation
 
@@ -60,31 +123,57 @@ npm install
 ```
 
 3. **Build the project:**
+Choose between development or production build:
+
+For development (includes source maps and full TypeScript compilation):
 ```bash
 npm run build
 ```
 
-4. **Test the server:**
+For production (creates an optimized, minified bundle):
+```bash
+npm run build:prod
+```
+
+4. **Run the test suite:**
+```bash
+npm test
+```
+
+5. **Start the server:**
 ```bash
 npm start
 ```
 
+### Updating After Changes
+
+When you pull new updates or modify the code, you must rebuild the server and restart your MCP client (Cursor, Claude Desktop, etc.) for the changes to take effect:
+
+1. Pull the latest code: `git pull`
+2. Install new dependencies (if any): `npm install`
+3. Rebuild the bundle: `npm run build:prod`
+4. **Important**: Restart your IDE or the MCP connection so the client can fetch the newly updated tools and prompts.
 
 ## Available Tools
 
-This MCP server provides **exactly 17 focused tools** for project guardianship:
+![Blotcat opening a large toolbox with three labeled drawers, holding a wrench](assets/blotcat-tool-categories.jpg)
+
+This MCP server currently provides **31 tools**:
 
 ### Database Operations (7 tools)
 
+All database tools accept an optional `database` selector: `project` (default) targets the active project's `memory.db`, `central` targets the central aggregate at `~/memory/memory.db`.
+
 #### `execute_sql` - Execute SQL Query
-Execute raw SQL queries on memory.db.
+Execute raw SQL queries on the selected memory database.
 
 **Parameters:**
 - `query` (required): SQL query string
 - `parameters` (optional): Query parameters array
+- `database` (optional): `"project"` or `"central"`, default `"project"`
 
 #### `query_data` - Query Table Data
-Query data from memory.db tables with filtering and pagination.
+Query memory tables with filtering and pagination.
 
 **Parameters:**
 - `table` (required): Table name
@@ -93,40 +182,45 @@ Query data from memory.db tables with filtering and pagination.
 - `offset` (optional): Number of rows to skip
 - `orderBy` (optional): Column to sort by
 - `orderDirection` (optional): Sort direction ("ASC" or "DESC")
+- `database` (optional): `"project"` or `"central"`, default `"project"`
 
 #### `insert_data` - Insert Records
-Insert records into memory.db table.
+Insert records into a memory table.
 
 **Parameters:**
 - `table` (required): Table name
 - `records` (required): Array of record objects to insert
+- `database` (optional): `"project"` or `"central"`, default `"project"`
 
 #### `update_data` - Update Records
-Update records in memory.db table.
+Update records in a memory table.
 
 **Parameters:**
 - `table` (required): Table name
 - `conditions` (required): WHERE conditions for records to update
 - `updates` (required): Fields to update
+- `database` (optional): `"project"` or `"central"`, default `"project"`
 
 #### `delete_data` - Delete Records
-Delete records from memory.db table.
+Delete records from a memory table.
 
 **Parameters:**
 - `table` (required): Table name
 - `conditions` (required): WHERE conditions for records to delete
+- `database` (optional): `"project"` or `"central"`, default `"project"`
 
 #### `import_data` - Import Data
-Import data from CSV or JSON file into memory.db table.
+Import data from CSV or JSON file into a memory table.
 
 **Parameters:**
 - `table` (required): Target table name
 - `filePath` (required): Path to source file
 - `format` (optional): File format ("csv" or "json")
 - `options` (optional): Import options (delimiter, hasHeader)
+- `database` (optional): `"project"` or `"central"`, default `"project"`
 
 #### `export_data` - Export Data
-Export memory.db table data to CSV or JSON file.
+Export memory table data to CSV or JSON file.
 
 **Parameters:**
 - `table` (required): Source table name
@@ -134,8 +228,9 @@ Export memory.db table data to CSV or JSON file.
 - `format` (optional): Output format ("csv" or "json")
 - `conditions` (optional): WHERE conditions to filter export
 - `options` (optional): Export options (delimiter, includeHeader)
+- `database` (optional): `"project"` or `"central"`, default `"project"`
 
-### Project Guardian Memory Tools (10 tools)
+### Memory and Guidance Tools (11 tools)
 
 #### `initialize_memory` - Initialize Memory System
 Set up the project memory database schema and tables.
@@ -192,12 +287,12 @@ Remove relationships between project entities (supports single or batch).
   - `relationType`: Relationship type to delete
 
 #### `read_graph` - Read Project Knowledge Graph
-Retrieve the entire project knowledge graph with all entities and relationships.
+Retrieve the full knowledge graph, merging the active project database with the central aggregate. Project entries win over central entries with the same name.
 
 **Parameters:** None
 
 #### `search_nodes` - Search Project Knowledge
-Search for entities and relations matching a query across names, types, and content.
+Search for entities and relations matching a query across names, types, and content, in both the project database and the central aggregate.
 
 **Parameters:**
 - `query` (required): Search term
@@ -208,13 +303,80 @@ Retrieve detailed information about project entities (supports single or batch).
 **Parameters:**
 - `names` (required): Array of entity names to retrieve
 
+#### `get_project_guidance` - Access AI Guidance
+Invoke a project guidance framework to receive specialized instructions and checklists for specific workflows. This allows the AI to autonomously fetch and follow established project management protocols.
+
+**Parameters:**
+- `guidance_name` (required): Name of the guidance (e.g., project-setup, sprint-planning)
+- `arguments` (optional): Arguments required by the specific guidance framework
+
+### Runtime Companion Tools (13 tools)
+
+#### `start_ui`
+Start the on-demand Project Guardian Web UI server to visually browse the knowledge graph in your browser. It automatically finds a free port and returns the local HTTP URL.
+
+#### `sync_central_memory`
+Copy the active project knowledge graph into the central memory database (`~/memory/memory.db` by default, override with `GUARDIAN_CENTRAL_DB`). Entities are upserted and relations deduplicated, so the central database accumulates a searchable map across all projects. Every memory write also syncs automatically; call this tool to force a sync on demand. The first sync of each day also snapshots the central database and prunes old backups beyond the newest seven.
+
+#### `set_project_root`
+Switch the active project memory database to the given absolute project path. Use this at session start when the server was launched outside the project directory, so memory is written to the project instead of the shared fallback database.
+
+- `path` (required): Absolute path to the project root. Inside a Git repository, the toplevel is used.
+
+#### `setup_pre_commit`
+Create a `.pre-commit-config.yaml` in the active project root and install the Git hooks, on demand. Requires `pre-commit` to be installed. The generated `.gitignore` entries are intentionally broad: alongside `memory.db`, the block ignores common local tool directories such as `.claude/`, `.vscode/`, `.idea/`, `.gemini/`, and `.cursor/`, plus `.env` files. Entries already present in `.gitignore` are never duplicated. The server never does any of this automatically at startup.
+
+#### `get_session_context`
+Summarize active tasks, open bugs, recent changes, blockers, and the next suggested action directly from the knowledge graph.
+
+- `limit` (optional, 1-50, default 10): Maximum entries per result group.
+
+#### `analyze_git_changes`
+Return exact machine-readable changed paths from Git, including renames and optionally untracked files.
+
+- `commit` (optional): Analyze one commit against its parent.
+- `since` (optional, default `1`): Analyze changes since N commits ago or a Git date.
+- `includeUntracked` (optional, default `true`): Include untracked files for worktree analysis.
+- `maxFiles` (optional, 1-500, default 100): Bound returned paths.
+- `commit` and a custom `since` value are mutually exclusive.
+
+#### `inspect_untrusted_text`
+Normalize up to 256 KiB of untrusted text and detect hidden formatting, instruction overrides, role mimicry, hidden HTML/CSS, remote exfiltration markup, and encoded instruction-like content.
+
+- `text` (required): External or otherwise untrusted content.
+- Detection is heuristic. Returned normalized text remains untrusted data.
+
+#### `scan_project_secrets`
+Scan a workspace-relative file or directory for likely hardcoded credentials. Results contain only type, relative file path, and line number; matched values are never returned.
+
+- `path` (optional, default `.`): Workspace-relative scan target.
+- `exclude` (optional): Additional directory names to skip.
+- `maxFindings` (optional, 1-500, default 100): Bound findings.
+- Absolute paths, traversal, missing paths, and symlink escapes are rejected.
+
+#### `scan_container_image`
+Run a timeout-limited Trivy scan and return bounded HIGH/CRITICAL vulnerability summaries.
+
+- `image` (required): Container image reference.
+- `maxFindings` (optional, 1-500, default 100): Bound findings.
+- Requires Trivy. Image values beginning with `-`, containing whitespace, or containing control characters are rejected.
+
+#### Redis cache tools
+
+- `cache_get`: Read one `mema:<category>:<name>` key.
+- `cache_set`: Store a value up to 512 KiB with optional `ttlSeconds` from 1 to 604800.
+- `cache_delete`: Delete one namespaced key.
+- `cache_scan`: Cursor-scan a `mema:*` pattern with a bounded count.
+
+Project scan paths are restricted to the current Git workspace. Redis tools connect lazily and return an unavailable error when `REDIS_URL` is unset. Container scanning remains unavailable until Trivy is installed. Read `project-guardian://companions/catalog` for current capability health.
+
 ## AI Guidance System
 
 Project Guardian MCP includes comprehensive resources and prompts to help AI models effectively use the toolset for project management.
 
 ### Available Resources
 
-Project Guardian provides **10 key resources** that AI models can read to understand project management concepts, access cached data, and get comprehensive project insights:
+Project Guardian provides **11 key resources** that AI models can read to understand project management concepts, access capability health, and get comprehensive project insights:
 
 #### `project-guardian://templates/entity-types`
 Standard entity types for project management with examples and usage guidelines.
@@ -246,9 +408,12 @@ Cached information about project team members and their roles within the organiz
 #### `project-guardian://status/recent-changes`
 Recent additions, updates, and modifications to the knowledge graph for audit and monitoring.
 
+#### `project-guardian://companions/catalog`
+Lists all six companions, their MCP tools, external prerequisites, and current availability.
+
 ### Available Prompts
 
-Project Guardian offers **27 specialized prompts** covering all aspects of comprehensive project management, from basic setup to advanced enterprise workflows:
+Project Guardian offers **27 prompts** covering project setup, planning, quality, operations, and incident workflows:
 
 #### Core Project Management
 #### `project-setup` - Project Initialization
@@ -457,10 +622,22 @@ Innovation management framework with idea generation, experimentation, and succe
 3. **Planning**: Use appropriate prompts for complex workflows
 4. **Execution**: Follow structured guidance to use tools effectively
 5. **Verification**: Check results and iterate as needed
-
 This guidance system ensures AI models can provide expert-level project management assistance using the Project Guardian toolset.
 
+### Behavioral Protocol (System Rules)
+
+Every `prompts/get` response from this MCP server includes a shared **Behavioral Protocol** as a system message (implemented in `src/prompts/behavioral-protocol.ts`). This protocol enforces:
+
+- Minimal, production-ready, self-documenting code with a security-first approach.
+- No buzzwords, unnecessary emoji, or filler; direct, technically accurate answers.
+- Adaptive response depth based on the user's request (quick answers vs. complex breakdowns).
+- Consistent use of validated best practices for systems, programming, UI/UX, and design.
+
+Clients integrating this MCP server should treat the first system message as the governing rules for any downstream model that uses these prompts.
+
 ## Usage Examples
+
+![Blotcat routing prompts and tools into memory.db](assets/blotcat-workflow.jpg)
 
 ### Project Guardian Setup
 
@@ -553,9 +730,44 @@ const importResult = await mcpClient.callTool('import_data', {
 
 ## Configuration
 
+![Blotcat plugging a giant power cord into a wall socket](assets/blotcat-configuration.jpg)
+
+### Environment Variables
+
+The server reads these variables at startup:
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `GUARDIAN_PROJECT_ROOT` | unset | Absolute path to the project root. When set, `memory.db` is stored here instead of relying on Git detection |
+| `GUARDIAN_CENTRAL_DB` | `~/memory/memory.db` | Absolute path to the central memory database that every project syncs into. Backups are written to a `backup/` directory next to it |
+| `GUARDIAN_AUTO_MERGE` | unset | Set to `1` to enable scattered-database consolidation at startup. This merges nested `memory.db` files into the project-root database and deletes them, so leave it unset when sub-projects keep separate memories |
+| `REDIS_URL` | unset | Enables the Redis-backed `cache_*` tools |
+| `XDG_DATA_HOME` | platform default | Base directory for the shared fallback database outside a Git repository |
+
+MCP clients launch servers with their own working directory, which is often your home folder rather than the project you are editing. In that situation Git detection cannot find the project and every session writes to the shared fallback database. Two ways to fix this:
+
+1. Set `GUARDIAN_PROJECT_ROOT` in the project's MCP configuration (see the client examples below).
+2. Call the `set_project_root` tool with the absolute project path at session start — no configuration edits needed. The switch applies to the running server; set the environment variable if you want it to apply automatically to every future session.
+
+### Optional Runtime Services
+
+Redis is optional and is never contacted during startup. Configure it only when cache tools are needed:
+
+```json
+{
+  "env": {
+    "REDIS_URL": "redis://localhost:6379/0"
+  }
+}
+```
+
+Trivy is discovered from `PATH` when `scan_container_image` is called. Missing Redis or Trivy affects only its associated tools; memory, database, guidance, session, Git, wall, and project-secret tools remain available.
+
+The companion catalog reports `available`, `optional`, or `unavailable` for each runtime capability. The server uses stdio transport and does not expose an HTTP listener.
+
 ### For Cursor IDE
 
-Add this server to your Cursor MCP configuration (`~/.cursor/mcp.json`):
+Add this server to your Cursor MCP configuration (`~/.cursor/mcp.json`). Replace the `GUARDIAN_PROJECT_ROOT` value with the project this configuration belongs to:
 
 ```json
 {
@@ -563,7 +775,9 @@ Add this server to your Cursor MCP configuration (`~/.cursor/mcp.json`):
     "project-guardian": {
       "command": "node",
       "args": ["/path/to/project-guardian-mcp-server/dist/index.js"],
-      "env": {}
+      "env": {
+        "GUARDIAN_PROJECT_ROOT": "/path/to/your/project"
+      }
     }
   }
 }
@@ -571,7 +785,7 @@ Add this server to your Cursor MCP configuration (`~/.cursor/mcp.json`):
 
 ### For Claude Desktop
 
-Add this server to your Claude Desktop configuration (`claude_desktop_config.json`):
+Add this server to your Claude Desktop configuration (`claude_desktop_config.json`), following the same pattern:
 
 ```json
 {
@@ -579,7 +793,9 @@ Add this server to your Claude Desktop configuration (`claude_desktop_config.jso
     "project-guardian": {
       "command": "node",
       "args": ["/path/to/project-guardian-mcp-server/dist/index.js"],
-      "env": {}
+      "env": {
+        "GUARDIAN_PROJECT_ROOT": "/path/to/your/project"
+      }
     }
   }
 }
@@ -591,63 +807,89 @@ Add this server to your Claude Desktop configuration (`claude_desktop_config.jso
 project-guardian-mcp-server/
 ├── src/
 │   ├── index.ts              # Main entry point
-│   ├── server.ts             # MCP server orchestrator (161 lines, fully modularized)
-│   ├── memory-manager.ts     # Knowledge graph and entity management
+│   ├── server.ts             # MCP server orchestrator
+│   ├── memory-manager.ts     # Knowledge graph and FTS5 RAG semantic search
 │   ├── sqlite-manager.ts     # Database operations and connection management
 │   ├── import-export.ts      # CSV/JSON data import and export functionality
+│   ├── ui-manager.ts         # On-Demand Web UI server and port finder
 │   ├── types.ts              # TypeScript type definitions and schemas
 │   ├── handlers/
 │   │   └── request-handlers.ts # Central tool execution dispatcher
 │   ├── tools/
 │   │   ├── tool-registry.ts     # Tool definitions and listing
 │   │   ├── database-tools.ts    # Database operation tool schemas
-│   │   └── memory-tools.ts      # Memory management tool schemas
+│   │   ├── memory-tools.ts      # Memory management tool schemas
+│   │   ├── guidance-tools.ts    # Guidance tool schema
+│   │   └── runtime-tools.ts     # Companion runtime tool schemas
+│   ├── runtime/
+│   │   ├── path-guard.ts        # Workspace path containment
+│   │   └── runtime-capabilities.ts # Native companion implementations
 │   ├── resources/
 │   │   ├── resource-registry.ts  # Resource definitions and handlers
 │   │   ├── resource-definitions.ts # Static resource metadata
-│   │   └── resource-handlers.ts   # Dynamic resource content generation
+│   │   ├── resource-handlers.ts   # Dynamic resource content generation
+│   │   └── companion-catalog.ts   # Companion capability health
 │   └── prompts/
-│       ├── prompt-registry.ts    # Prompt definitions and handlers
-│       ├── prompt-definitions.ts # Static prompt metadata
-│       └── prompt-handlers.ts    # Dynamic prompt content generation
+│       ├── prompt-registry.ts       # Prompt definitions and handlers
+│       ├── prompt-definitions.ts    # Static prompt metadata
+│       ├── prompt-handlers.ts       # Dynamic prompt content generation
+│       └── behavioral-protocol.ts   # Shared Behavioral Protocol system prompt
+├── ui/                       # On-Demand Web UI frontend (Vite/React)
+│   ├── src/
+│   │   ├── App.tsx           # Main CRT-themed node graph visualization
+│   │   ├── main.tsx          # React DOM entry point
+│   │   └── index.css         # Styling, CRT scanlines, and CSS variables
+│   └── vite.config.ts        # Vite build configuration
 ├── __tests__/                # Comprehensive test suite
 │   ├── tool-registry.test.ts
 │   ├── resource-registry.test.ts
 │   ├── prompt-registry.test.ts
 │   ├── request-handlers.test.ts
+│   ├── runtime-capabilities.test.ts
 │   ├── import-export.test.ts
-│   └── sqlite-manager.test.ts
-├── dist/                     # Compiled JavaScript output (optimized for production)
-├── memory.db                 # SQLite database file (created on first run)
+│   ├── sqlite-manager.test.ts
+│   └── bug-fixes.test.ts
+├── skills/                   # Six distributable guardian-* AgentSkills
+├── dist/                     # Ignored production build output
+├── memory.db                 # Ignored local SQLite state, created on first run
 ├── package.json              # Project dependencies and scripts
 ├── package.prod.json         # Production-only dependencies for smaller bundle
 ├── tsconfig.json            # TypeScript configuration
 ├── jest.config.js           # Test configuration
-├── Dockerfile               # Multi-stage production container
-├── .dockerignore           # Docker build optimization
 └── README.md                # This documentation
 ```
 
 ### Key Components
 
-- **server.ts**: Clean orchestrator (161 lines) coordinating modular components
+- **server.ts**: MCP server lifecycle, transport, handlers, and shutdown coordination
 - **handlers/request-handlers.ts**: Central dispatcher routing tool calls to appropriate managers
-- **tools/**: Tool definition and registration system (17 tools total)
+- **tools/**: Tool definition and registration system (31 tools total)
   - `tool-registry.ts`: Lists all available tools
   - `database-tools.ts`: Database operation schemas (7 tools)
   - `memory-tools.ts`: Memory management schemas (10 tools)
+  - `guidance-tools.ts`: Autonomous guidance tool schema (1 tool)
+  - `runtime-tools.ts`: Typed companion capability schemas (9 tools)
+- **runtime/**: Workspace guards and companion runtime implementations
 - **resources/**: Resource management system (11 resources total)
   - `resource-registry.ts`: Resource listing and content serving
   - `resource-definitions.ts`: Static resource metadata
   - `resource-handlers.ts`: Dynamic content generation
-- **prompts/**: Prompt management system (28 prompts total)
+- **prompts/**: Prompt management system (27 prompts total)
   - `prompt-registry.ts`: Prompt listing and content serving
   - `prompt-definitions.ts`: Static prompt metadata
   - `prompt-handlers.ts`: Dynamic prompt generation with context
+  - `behavioral-protocol.ts`: Centralized Behavioral Protocol system message used by all prompts
 - **memory-manager.ts**: Knowledge graph operations for entities, relationships, and observations
-- **sqlite-manager.ts**: Database abstraction layer with connection pooling and schema management
-- **import-export.ts**: Data transfer utilities for CSV and JSON formats
+- **sqlite-manager.ts**: Database abstraction with bounded connection caching and schema management
+- **import-export.ts**: CSV, JSON, and SQL data transfer utilities
 - **types.ts**: Zod schemas for input validation and TypeScript type safety
+- **skills/**: Agent-side workflows, scripts, references, and assets for the six companion packages
+
+### Local State
+
+`memory.db` and its `memory.db-*` sidecars are runtime state and are ignored by Git. Each project keeps its own database at its resolved project root (see [Environment Variables](#environment-variables)); projects outside any Git repository without an explicit root share the fallback database under `$XDG_DATA_HOME/project-guardian`. In addition, every memory write mirrors into the central database at `~/memory/memory.db`, which is a merge across projects: deleting an entity in one project does not remove it from the central copy, so treat the central database as a searchable aggregate rather than a per-project backup. Daily snapshots live in `~/memory/backup/`. A clone starts with no project memory; the server creates the database and schema locally on first run. Back up or export memory explicitly when it must move between machines. Never commit the database because observations can contain private project context.
+
+The database tools (`execute_sql`, `query_data`, `insert_data`, `update_data`, `delete_data`, `import_data`, `export_data`) accept a `database` selector: `project` (default) targets the active project database, `central` targets the aggregate.
 
 ## Development
 
@@ -663,11 +905,27 @@ npm install
 ```
 
 3. **Build the project:**
+For active development (with file watching):
+```bash
+npm run dev
+```
+
+For a standard build:
 ```bash
 npm run build
 ```
 
-4. **Test the server:**
+For a production-optimized build:
+```bash
+npm run build:prod
+```
+
+4. **Run tests:**
+```bash
+npm test
+```
+
+5. **Start the server:**
 ```bash
 npm start
 ```

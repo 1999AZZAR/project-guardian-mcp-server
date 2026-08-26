@@ -1,0 +1,4 @@
+interface:
+  display_name: "Guardian Cache"
+  short_description: "Store temporary agent data safely in Redis."
+  default_prompt: "Cache this result in the appropriate mema namespace with a safe TTL."

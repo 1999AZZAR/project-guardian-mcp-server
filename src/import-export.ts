@@ -1,4 +1,5 @@
-import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, createReadStream } from 'fs';
+import { createInterface } from 'readline';
 import { SQLiteManager } from './sqlite-manager.js';
 import { DatabaseOperationResult } from './types.js';
 
@@ -24,11 +25,67 @@ export class ImportExportManager {
       }
 
       let records: any[] = [];
+      const BATCH_SIZE = 1000;
+      let importedCount = 0;
 
       switch (format) {
-        case 'csv':
-          records = await this.parseCSV(filePath, options);
-          break;
+        case 'csv': {
+          const rl = createInterface({ input: createReadStream(filePath) });
+          const delimiter = options?.delimiter || ',';
+          const hasHeader = options?.hasHeader !== false;
+          let header: string[] = [];
+          let isFirst = true;
+          let batch: any[] = [];
+
+          try {
+            for await (const line of rl) {
+              if (!line.trim()) continue;
+              const values = this.parseCSVLine(line, delimiter);
+              if (isFirst && hasHeader) {
+                header = values;
+                isFirst = false;
+                continue;
+              }
+              if (isFirst && !hasHeader) {
+                header = values.map((_, i) => `column_${i + 1}`);
+                isFirst = false;
+              }
+
+              const record: any = {};
+              for (let i = 0; i < header.length; i++) {
+                record[header[i]] = values[i] ?? '';
+              }
+              batch.push(record);
+
+              if (batch.length >= BATCH_SIZE) {
+                const r = await this.sqliteManager.insertData(database, table, batch);
+                if (!r.success) throw new Error(r.error || 'Insert failed');
+                importedCount += batch.length;
+                batch = [];
+              }
+            }
+
+            if (batch.length > 0) {
+              const r = await this.sqliteManager.insertData(database, table, batch);
+              if (!r.success) throw new Error(r.error || 'Insert failed');
+              importedCount += batch.length;
+            }
+          } finally {
+            rl.close();
+          }
+
+          if (importedCount === 0) {
+            return { success: false, message: 'No data found in file', error: 'Empty file' };
+          }
+
+          const csvExecTime = Date.now() - startTime;
+          return {
+            success: true,
+            message: `Imported ${importedCount} records from CSV file`,
+            data: { importedCount, format: 'csv', filePath },
+            executionTime: csvExecTime
+          };
+        }
         case 'json':
           records = await this.parseJSON(filePath);
           break;
@@ -50,7 +107,6 @@ export class ImportExportManager {
         };
       }
 
-      // Insert records into database
       const result = await this.sqliteManager.insertData(database, table, records);
       
       if (result.success) {
@@ -219,26 +275,37 @@ export class ImportExportManager {
   }
 
   private async executeSQLFile(database: string, filePath: string): Promise<DatabaseOperationResult> {
-    const content = readFileSync(filePath, 'utf8');
-    
-    // Split by semicolon and execute each statement
-    const statements = content.split(';').filter(stmt => stmt.trim());
-    
+    const rl = createInterface({ input: createReadStream(filePath) });
+    let buffer = '';
     let executedCount = 0;
-    for (const statement of statements) {
-      const trimmed = statement.trim();
-      if (trimmed) {
-        const result = await this.sqliteManager.executeSql(database, trimmed);
-        if (result.success) {
+
+    for await (const line of rl) {
+      buffer += line + '\n';
+      const idx = buffer.indexOf(';');
+      while (idx !== -1) {
+        const stmt = buffer.slice(0, idx).trim();
+        buffer = buffer.slice(idx + 1);
+        if (stmt) {
+          const result = await this.sqliteManager.executeSql(database, stmt);
+          if (!result.success) {
+            rl.close();
+            return {
+              success: false,
+              message: `Failed to execute SQL statement: ${stmt.substring(0, 50)}...`,
+              error: result.error
+            };
+          }
           executedCount++;
-        } else {
-          return {
-            success: false,
-            message: `Failed to execute SQL statement: ${trimmed.substring(0, 50)}...`,
-            error: result.error
-          };
         }
+        const nextIdx = buffer.indexOf(';');
+        if (nextIdx === -1) break;
       }
+    }
+
+    const remaining = buffer.trim();
+    if (remaining) {
+      const result = await this.sqliteManager.executeSql(database, remaining);
+      if (result.success) executedCount++;
     }
 
     return {
@@ -250,27 +317,26 @@ export class ImportExportManager {
 
   private generateCSV(columns: string[], rows: any[], options?: any): string {
     const delimiter = options?.delimiter || ',';
-    const includeHeader = options?.includeHeader !== false; // Default to true
+    const includeHeader = options?.includeHeader !== false;
     
-    let content = '';
+    const lines: string[] = [];
     
     if (includeHeader) {
-      content += columns.join(delimiter) + '\n';
+      lines.push(columns.join(delimiter));
     }
     
     for (const row of rows) {
       const values = columns.map(col => {
         const value = row[col];
-        // Escape quotes and wrap in quotes if contains delimiter or quotes
         if (typeof value === 'string' && (value.includes(delimiter) || value.includes('"'))) {
           return `"${value.replace(/"/g, '""')}"`;
         }
-        return value || '';
+        return value ?? '';
       });
-      content += values.join(delimiter) + '\n';
+      lines.push(values.join(delimiter));
     }
     
-    return content;
+    return lines.join('\n');
   }
 
   private generateJSON(rows: any[], options?: any): string {
