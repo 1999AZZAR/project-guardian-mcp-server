@@ -60,6 +60,8 @@ body {
   display: flex;
   height: 100vh;
   width: 100vw;
+  max-width: 100vw;
+  overflow: hidden;
   position: relative;
   animation: flicker 4s infinite alternate;
 }
@@ -68,6 +70,7 @@ body {
 .sidebar {
   width: 340px;
   min-width: 340px;
+  max-width: 340px;
   background-color: var(--bg-panel);
   border-right: 1px solid var(--border-color);
   display: flex;
@@ -75,6 +78,9 @@ body {
   z-index: 10;
   box-shadow: var(--shadow-md);
   position: relative;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 .sidebar-header {
@@ -227,22 +233,24 @@ body {
   background: rgba(0, 255, 0, 0.05);
 }
 
-/* Right Details Panel */
+/* Right Details Panel — flex sibling, not overlay (fixes out-of-screen graph) */
 .right-panel {
   width: 380px;
   min-width: 380px;
+  max-width: 380px;
   background-color: var(--bg-panel);
   border-left: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
   z-index: 10;
   box-shadow: var(--shadow-md);
-  position: absolute;
-  right: 0;
-  top: 0;
-  bottom: 0;
+  position: relative;
+  height: 100vh;
   padding: 24px 20px;
   overflow-y: auto;
+  overflow-x: hidden;
+  flex-shrink: 0;
+  box-sizing: border-box;
 }
 
 .node-header {
@@ -326,12 +334,15 @@ body {
 /* Graph Container */
 .graph-container {
   flex: 1;
+  min-width: 0;
+  min-height: 0;
   position: relative;
   background-color: var(--bg-canvas);
   background-image: 
     linear-gradient(rgba(0, 255, 0, 0.05) 1px, transparent 1px),
     linear-gradient(90deg, rgba(0, 255, 0, 0.05) 1px, transparent 1px);
   background-size: 30px 30px;
+  overflow: hidden;
 }
 
 .graph-overlay-hint {
