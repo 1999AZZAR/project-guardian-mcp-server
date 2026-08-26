@@ -1,7 +1,9 @@
 import express from 'express';
 import cors from 'cors';
 import { Server } from 'http';
-import { join } from 'path';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
+import { existsSync } from 'fs';
 import { MemoryManager } from './memory-manager.js';
 
 export class UIManager {
@@ -17,7 +19,15 @@ export class UIManager {
 
     const app = express();
     app.use(cors());
-    app.use(express.static(join(process.cwd(), 'ui', 'dist')));
+    const cwdUiPath = join(process.cwd(), 'ui', 'dist');
+    const guardianUiPath = join(dirname(fileURLToPath(import.meta.url)), '..', 'ui', 'dist');
+    const altPath = '/home/azzar/project/MCPservers/Project-Guardian-mcp-server/ui/dist';
+    let uiPath = guardianUiPath;
+    if (existsSync(join(cwdUiPath, 'index.html'))) uiPath = cwdUiPath;
+    else if (existsSync(join(guardianUiPath, 'index.html'))) uiPath = guardianUiPath;
+    else if (existsSync(join(altPath, 'index.html'))) uiPath = altPath;
+    console.error(`UI static path: ${uiPath}`);
+    app.use(express.static(uiPath));
 
     app.get('/api/graph/project', async (req, res) => {
       try {
@@ -35,6 +45,11 @@ export class UIManager {
       } catch (err) {
         res.status(500).json({ error: String(err) });
       }
+    });
+
+    // SPA fallback
+    app.use((req, res) => {
+      res.sendFile(join(uiPath, 'index.html'));
     });
 
     return new Promise((resolve, reject) => {
