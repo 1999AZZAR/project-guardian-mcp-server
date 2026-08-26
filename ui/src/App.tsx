@@ -30,7 +30,7 @@ function App() {
   const [view, setView] = useState<'project' | 'central'>('central');
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [showObservations, setShowObservations] = useState(true);
+  const [showObservations, setShowObservations] = useState(false);
   const fgRef = useRef<any>(null);
 
   useEffect(() => {
