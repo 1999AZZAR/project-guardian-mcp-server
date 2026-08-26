@@ -71,6 +71,14 @@ export class SQLiteManager {
     const dbPath = this.getDatabasePath(name);
     const db = new sqlite3.Database(dbPath);
     this.connections.set(name, db);
+    // Performance: WAL + NORMAL sync + memory temp, 5s busy timeout
+    try {
+      await this.runQuery(db, 'PRAGMA journal_mode=WAL');
+      await this.runQuery(db, 'PRAGMA synchronous=NORMAL');
+      await this.runQuery(db, 'PRAGMA cache_size=-64000');
+      await this.runQuery(db, 'PRAGMA temp_store=MEMORY');
+      await this.runQuery(db, 'PRAGMA busy_timeout=5000');
+    } catch {}
     return db;
   }
 

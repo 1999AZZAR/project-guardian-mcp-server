@@ -8,7 +8,7 @@ import {
   DeleteDataSchema, ImportFromFileSchema, ExportToFileSchema,
   CreateEntitiesSchema, CreateRelationsSchema, AddObservationsSchema,
   DeleteEntitiesSchema, DeleteObservationsSchema, DeleteRelationsSchema,
-  SearchNodesSchema, OpenNodesSchema
+  SearchNodesSchema, OpenNodesSchema, ReadGraphSchema
 } from '../types.js';
 import {
   AnalyzeGitChangesSchema, CacheDeleteSchema, CacheGetSchema, CacheScanSchema, CacheSetSchema,
@@ -40,6 +40,7 @@ const toolSchemas: Record<string, z.ZodSchema> = {
   delete_relation: DeleteRelationsSchema,
   search_nodes: SearchNodesSchema,
   open_node: OpenNodesSchema,
+  read_graph: ReadGraphSchema,
   get_session_context: GetSessionContextSchema,
   analyze_git_changes: AnalyzeGitChangesSchema,
   inspect_untrusted_text: InspectUntrustedTextSchema,
@@ -270,12 +271,17 @@ export class RequestHandlers {
         return { success: true, message: `Deleted ${args.relations.length} relations` };
 
       case 'read_graph': {
-        const graph = await this.memoryManager.readGraph();
+        const database = args.database;
+        if (database) {
+          const g = await this.memoryManager.readStore(database === 'central' ? this.memoryManager.getCentralDatabaseId() : 'memory', { limit: args.limit, offset: args.offset });
+          return { success: true, data: g };
+        }
+        const graph = await this.memoryManager.readGraph({ limit: args.limit, offset: args.offset });
         return { success: true, data: graph };
       }
 
       case 'search_nodes': {
-        const searchResult = await this.memoryManager.searchNodes(args.query);
+        const searchResult = await this.memoryManager.searchNodes(args.query, args.limit);
         return { success: true, data: searchResult };
       }
 

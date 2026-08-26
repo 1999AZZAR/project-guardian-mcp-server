@@ -31,7 +31,9 @@ export class UIManager {
 
     app.get('/api/graph/project', async (req, res) => {
       try {
-        const graph = await this.memoryManager.readStore('memory');
+        const limit = req.query.limit ? Math.min(10000, Math.max(1, parseInt(String(req.query.limit), 10) || 5000)) : 5000;
+        const offset = req.query.offset ? Math.max(0, parseInt(String(req.query.offset), 10) || 0) : undefined;
+        const graph = await this.memoryManager.readStore('memory', { limit, offset });
         res.json(graph);
       } catch (err) {
         res.status(500).json({ error: String(err) });
@@ -40,7 +42,9 @@ export class UIManager {
 
     app.get('/api/graph/central', async (req, res) => {
       try {
-        const graph = await this.memoryManager.readStore(this.memoryManager.getCentralDatabaseId());
+        const limit = req.query.limit ? Math.min(10000, Math.max(1, parseInt(String(req.query.limit), 10) || 5000)) : 5000;
+        const offset = req.query.offset ? Math.max(0, parseInt(String(req.query.offset), 10) || 0) : undefined;
+        const graph = await this.memoryManager.readStore(this.memoryManager.getCentralDatabaseId(), { limit, offset });
         res.json(graph);
       } catch (err) {
         res.status(500).json({ error: String(err) });

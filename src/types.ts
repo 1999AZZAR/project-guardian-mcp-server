@@ -209,6 +209,13 @@ export const DeleteRelationsSchema = z.object({
 
 export const SearchNodesSchema = z.object({
   query: z.string().min(1),
+  limit: z.number().int().min(1).max(100).default(20).optional(),
+});
+
+export const ReadGraphSchema = z.object({
+  database: z.enum(['project', 'central']).optional(),
+  limit: z.number().int().min(1).max(10000).optional(),
+  offset: z.number().int().min(0).optional(),
 });
 
 const OpenNodeSchema = z.object({

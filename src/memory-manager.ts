@@ -133,7 +133,7 @@ export class MemoryManager {
   }
 
   async syncToCentral(): Promise<{ entities: number; relations: number }> {
-    const graph = await this.readStore(this.memoryDbName);
+    const graph = await this.readStore(this.memoryDbName, { limit: 10000 });
     if (graph.entities.length === 0 && graph.relations.length === 0) {
       return { entities: 0, relations: 0 };
     }
@@ -741,9 +741,11 @@ export class MemoryManager {
     return { entities: [...entities.values()], relations: [...relations.values()] };
   }
 
-  async readStore(database: string): Promise<KnowledgeGraph> {
-    const entitiesResult = await this.sqliteManager.queryData(database, 'entities', {});
-    const relationsResult = await this.sqliteManager.queryData(database, 'relations', {});
+  async readStore(database: string, opts?: { limit?: number; offset?: number }): Promise<KnowledgeGraph> {
+    const limit = opts?.limit ?? 5000;
+    const offset = opts?.offset;
+    const entitiesResult = await this.sqliteManager.queryData(database, 'entities', {}, limit, offset, 'updated_at', 'DESC');
+    const relationsResult = await this.sqliteManager.queryData(database, 'relations', {}, limit, offset);
     return {
       entities: (entitiesResult.success && entitiesResult.data)
         ? entitiesResult.data.rows.map((row: any) => this.rowToEntity(row))
@@ -754,11 +756,13 @@ export class MemoryManager {
     };
   }
 
-  async readGraph(): Promise<KnowledgeGraph> {
-    const projectResult = await this.sqliteManager.queryData(this.memoryDbName, 'entities', {});
-    const projectRelations = await this.sqliteManager.queryData(this.memoryDbName, 'relations', {});
-    const centralResult = await this.sqliteManager.queryData(this.centralDbPath, 'entities', {});
-    const centralRelations = await this.sqliteManager.queryData(this.centralDbPath, 'relations', {});
+  async readGraph(opts?: { limit?: number; offset?: number }): Promise<KnowledgeGraph> {
+    const limit = opts?.limit ?? 5000;
+    const offset = opts?.offset;
+    const projectResult = await this.sqliteManager.queryData(this.memoryDbName, 'entities', {}, limit, offset, 'updated_at', 'DESC');
+    const projectRelations = await this.sqliteManager.queryData(this.memoryDbName, 'relations', {}, limit, offset);
+    const centralResult = await this.sqliteManager.queryData(this.centralDbPath, 'entities', {}, limit, offset, 'updated_at', 'DESC');
+    const centralRelations = await this.sqliteManager.queryData(this.centralDbPath, 'relations', {}, limit, offset);
 
     return this.mergeGraphs([
       {
@@ -780,7 +784,8 @@ export class MemoryManager {
     ]);
   }
 
-  async searchNodes(query: string): Promise<SearchResult> {
+  async searchNodes(query: string, limit: number = 20): Promise<SearchResult> {
+    const cappedLimit = Math.min(Math.max(limit, 1), 100);
     // Sanitize query to prevent FTS syntax errors
     const sanitizedQuery = query.replace(/[^a-zA-Z0-9_\s]/g, ' ').trim().replace(/\s+/g, ' OR ');
     
@@ -796,7 +801,7 @@ export class MemoryManager {
       JOIN entities_fts fts ON e.rowid = fts.rowid
       WHERE entities_fts MATCH ?
       ORDER BY bm25(entities_fts)
-      LIMIT 20
+      LIMIT ${cappedLimit}
     `;
 
     // Relations don't have FTS, keep LIKE but scoped to the sanitized terms
