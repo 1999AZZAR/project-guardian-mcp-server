@@ -68,7 +68,8 @@ export class RequestHandlers {
     private importExportManager: ImportExportManager,
     private promptHandlers: PromptHandlers,
     private runtimeCapabilities?: RuntimeCapabilities,
-    private startUI?: () => Promise<number>
+    private startUI?: () => Promise<number>,
+    private stopUI?: () => Promise<void>
   ) {}
 
   async handleToolCall(name: string, args: any): Promise<any> {
@@ -109,6 +110,15 @@ export class RequestHandlers {
         return {
           success: true,
           message: `UI Server successfully started on http://localhost:${port}`
+        };
+      }
+
+      if (name === 'close_ui' || name === 'stop_ui') {
+        if (!this.stopUI) throw new Error('UI Server is not available');
+        await this.stopUI();
+        return {
+          success: true,
+          message: 'UI Server stopped'
         };
       }
 

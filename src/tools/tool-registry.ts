@@ -17,6 +17,24 @@ export const allTools: Tool[] = [
       properties: {},
       required: []
     }
+  },
+  {
+    name: 'close_ui',
+    description: 'Stop the Project Guardian Web UI server if running. Use after start_ui or to free port 3000.',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+      required: []
+    }
+  },
+  {
+    name: 'stop_ui',
+    description: 'Alias for close_ui — stop the Web UI server.',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+      required: []
+    }
   }
 ];
 

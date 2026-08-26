@@ -82,7 +82,8 @@ export class DatabaseMCPServer {
       this.importExportManager,
       this.promptHandlers,
       this.runtimeCapabilities,
-      this.uiManager.start.bind(this.uiManager)
+      this.uiManager.start.bind(this.uiManager),
+      this.uiManager.stop.bind(this.uiManager)
     );
 
     this.server = new Server(

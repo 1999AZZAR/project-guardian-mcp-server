@@ -49,8 +49,15 @@ describe('ToolRegistry', () => {
       ]));
     });
 
-    test('should have exactly 31 tools', () => {
-      expect(allTools).toHaveLength(31);
+    test('should have exactly 33 tools', () => {
+      expect(allTools).toHaveLength(33);
+    });
+
+    test('should include UI tools', () => {
+      const toolNames = allTools.map(t => t.name);
+      expect(toolNames).toContain('start_ui');
+      expect(toolNames).toContain('close_ui');
+      expect(toolNames).toContain('stop_ui');
     });
   });
 
