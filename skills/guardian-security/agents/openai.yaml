@@ -1,0 +1,4 @@
+interface:
+  display_name: "Guardian Security"
+  short_description: "Automated security auditing for hardcoded secrets and CVEs."
+  default_prompt: "Scan this project for hardcoded secrets and relevant container vulnerabilities."

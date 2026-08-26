@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
-    "build:prod": "mkdir -p .tmp && cp package.prod.json .tmp/package.json && cd .tmp && npm install --production && cd .. && npx esbuild src/index.ts --bundle --minify --platform=node --target=node18 --outfile=dist/index.js --external:@modelcontextprotocol/sdk --external:sqlite3 --external:zod && rm -rf .tmp",
+    "build:prod": "mkdir -p .tmp && cp package.prod.json .tmp/package.json && cd .tmp && npm install --production && cd .. && npx esbuild src/index.ts --bundle --minify --platform=node --format=esm --target=node18 --outfile=dist/index.js --external:@modelcontextprotocol/sdk --external:sqlite3 --external:zod --external:redis && rm -rf .tmp",
     "dev": "tsc --watch",
     "start": "node dist/index.js",
     "test": "NODE_OPTIONS=--experimental-vm-modules jest",
@@ -32,18 +32,24 @@
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.25.2",
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "redis": "^4.7.1",
     "sqlite3": "^5.1.6",
     "zod": "^3.22.4"
   },
   "devDependencies": {
+    "@jest/globals": "^30.4.1",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
     "@types/jest": "^29.5.8",
     "@types/node": "^20.19.25",
     "@typescript-eslint/eslint-plugin": "^6.12.0",
     "@typescript-eslint/parser": "^6.12.0",
+    "esbuild": "^0.28.2",
     "eslint": "^8.54.0",
     "jest": "^29.7.0",
     "ts-jest": "^29.1.1",
-    "tslib": "^2.8.1",
     "typescript": "^5.2.2"
   },
   "engines": {

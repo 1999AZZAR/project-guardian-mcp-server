@@ -1,27 +1,27 @@
 import { z } from 'zod';
 
 // Database types
-export const DatabaseTypeSchema = z.enum(['sqlite', 'postgresql', 'mysql', 'mongodb']);
-export type DatabaseType = z.infer<typeof DatabaseTypeSchema>;
+const DatabaseTypeSchema = z.enum(['sqlite', 'postgresql', 'mysql', 'mongodb']);
+type DatabaseType = z.infer<typeof DatabaseTypeSchema>;
 
 // Database operations schemas
-export const CreateDatabaseSchema = z.object({
+const CreateDatabaseSchema = z.object({
   name: z.string().min(1).max(255),
   type: DatabaseTypeSchema.default('sqlite'),
   path: z.string().optional(), // For SQLite file path
 });
 
-export const ListDatabasesSchema = z.object({
+const ListDatabasesSchema = z.object({
   type: DatabaseTypeSchema.optional(),
 });
 
-export const DropDatabaseSchema = z.object({
+const DropDatabaseSchema = z.object({
   name: z.string().min(1),
   type: DatabaseTypeSchema.default('sqlite'),
 });
 
 // Table operations schemas
-export const CreateTableSchema = z.object({
+const CreateTableSchema = z.object({
   database: z.string().min(1),
   name: z.string().min(1).max(255),
   schema: z.object({
@@ -40,16 +40,16 @@ export const CreateTableSchema = z.object({
   }),
 });
 
-export const ListTablesSchema = z.object({
+const ListTablesSchema = z.object({
   database: z.string().min(1),
 });
 
-export const DescribeTableSchema = z.object({
+const DescribeTableSchema = z.object({
   database: z.string().min(1),
   table: z.string().min(1),
 });
 
-export const DropTableSchema = z.object({
+const DropTableSchema = z.object({
   database: z.string().min(1),
   table: z.string().min(1),
 });
@@ -84,7 +84,7 @@ export const DeleteDataSchema = z.object({
   conditions: z.record(z.any()),
 });
 
-export const CountRecordsSchema = z.object({
+const CountRecordsSchema = z.object({
   database: z.string().min(1),
   table: z.string().min(1),
   conditions: z.record(z.any()).optional(),
@@ -122,18 +122,18 @@ export const ExportToFileSchema = z.object({
   }).optional(),
 });
 
-export const BackupDatabaseSchema = z.object({
+const BackupDatabaseSchema = z.object({
   database: z.string().min(1),
   backupPath: z.string().min(1),
 });
 
-export const RestoreDatabaseSchema = z.object({
+const RestoreDatabaseSchema = z.object({
   backupPath: z.string().min(1),
   databaseName: z.string().min(1),
 });
 
 // Memory Management schemas
-export const CreateEntitySchema = z.object({
+const CreateEntitySchema = z.object({
   name: z.string().min(1),
   entityType: z.string().min(1),
   observations: z.array(z.string()).min(1),
@@ -147,7 +147,7 @@ export const CreateEntitiesSchema = z.object({
   })).min(1),
 });
 
-export const CreateRelationSchema = z.object({
+const CreateRelationSchema = z.object({
   from: z.string().min(1),
   to: z.string().min(1),
   relationType: z.string().min(1),
@@ -161,7 +161,7 @@ export const CreateRelationsSchema = z.object({
   })).min(1),
 });
 
-export const AddObservationSchema = z.object({
+const AddObservationSchema = z.object({
   entityName: z.string().min(1),
   contents: z.array(z.string()).min(1),
 });
@@ -173,7 +173,7 @@ export const AddObservationsSchema = z.object({
   })).min(1),
 });
 
-export const DeleteEntitySchema = z.object({
+const DeleteEntitySchema = z.object({
   entityName: z.string().min(1),
 });
 
@@ -181,7 +181,7 @@ export const DeleteEntitiesSchema = z.object({
   entityNames: z.array(z.string()).min(1),
 });
 
-export const DeleteObservationSchema = z.object({
+const DeleteObservationSchema = z.object({
   entityName: z.string().min(1),
   observations: z.array(z.string()).min(1),
 });
@@ -193,7 +193,7 @@ export const DeleteObservationsSchema = z.object({
   })).min(1),
 });
 
-export const DeleteRelationSchema = z.object({
+const DeleteRelationSchema = z.object({
   from: z.string().min(1),
   to: z.string().min(1),
   relationType: z.string().min(1),
@@ -211,13 +211,84 @@ export const SearchNodesSchema = z.object({
   query: z.string().min(1),
 });
 
-export const OpenNodeSchema = z.object({
+const OpenNodeSchema = z.object({
   name: z.string().min(1),
 });
 
 export const OpenNodesSchema = z.object({
   names: z.array(z.string()).min(1),
 });
+
+const SafeRevisionSchema = z.string().min(1).max(200).refine(
+  value => !value.startsWith('-') && !/[\0-\x1f\x7f]/.test(value),
+  'Revision must not start with - or contain control characters'
+);
+const CacheKeySchema = z.string().min(1).max(512).regex(
+  /^mema:[a-z]+:[A-Za-z0-9_:.-]+$/,
+  'Key must match mema:<category>:<name>'
+);
+
+export const GetSessionContextSchema = z.object({
+  limit: z.number().int().min(1).max(50).default(10),
+}).strict();
+
+export const AnalyzeGitChangesSchema = z.object({
+  commit: SafeRevisionSchema.optional(),
+  since: SafeRevisionSchema.default('1'),
+  includeUntracked: z.boolean().default(true),
+  maxFiles: z.number().int().min(1).max(500).default(100),
+}).strict().refine(value => !(value.commit && value.since !== '1'), {
+  message: 'commit and since are mutually exclusive',
+});
+
+export const InspectUntrustedTextSchema = z.object({
+  text: z.string().refine(value => Buffer.byteLength(value, 'utf8') <= 256 * 1024, 'Text exceeds 256 KiB'),
+}).strict();
+
+export const ScanProjectSecretsSchema = z.object({
+  path: z.string().max(500).default('.'),
+  exclude: z.array(z.string().min(1).max(100).regex(/^[^/\\.][^/\\]*$/)).max(50).default([]),
+  maxFindings: z.number().int().min(1).max(500).default(100),
+}).strict();
+
+export const ScanContainerImageSchema = z.object({
+  image: z.string().min(1).max(255).refine(
+    value => !value.startsWith('-') && !/[\s\0-\x1f\x7f]/.test(value),
+    'Image reference contains unsafe characters'
+  ),
+  maxFindings: z.number().int().min(1).max(500).default(100),
+}).strict();
+
+export const CacheGetSchema = z.object({ key: CacheKeySchema }).strict();
+export const CacheSetSchema = z.object({
+  key: CacheKeySchema,
+  value: z.string().refine(value => Buffer.byteLength(value, 'utf8') <= 512 * 1024, 'Value exceeds 512 KiB'),
+  ttlSeconds: z.number().int().min(1).max(604800).optional(),
+}).strict();
+export const CacheDeleteSchema = z.object({ key: CacheKeySchema }).strict();
+export const CacheScanSchema = z.object({
+  pattern: z.string().min(1).max(512).regex(/^mema:/).default('mema:*'),
+  cursor: z.number().int().min(0).default(0),
+  count: z.number().int().min(1).max(200).default(100),
+}).strict();
+
+export const SetProjectRootSchema = z.object({
+  path: z.string().min(1).max(4096),
+}).strict();
+
+export const SetupPreCommitSchema = z.object({}).strict();
+
+export const SyncCentralMemorySchema = z.object({}).strict();
+
+export type GetSessionContextInput = z.infer<typeof GetSessionContextSchema>;
+export type AnalyzeGitChangesInput = z.infer<typeof AnalyzeGitChangesSchema>;
+export type InspectUntrustedTextInput = z.infer<typeof InspectUntrustedTextSchema>;
+export type ScanProjectSecretsInput = z.infer<typeof ScanProjectSecretsSchema>;
+export type ScanContainerImageInput = z.infer<typeof ScanContainerImageSchema>;
+export type CacheGetInput = z.infer<typeof CacheGetSchema>;
+export type CacheSetInput = z.infer<typeof CacheSetSchema>;
+export type CacheDeleteInput = z.infer<typeof CacheDeleteSchema>;
+export type CacheScanInput = z.infer<typeof CacheScanSchema>;
 
 // Response types
 export interface DatabaseInfo {

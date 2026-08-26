@@ -1,6 +1,7 @@
 import { ReadResourceRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { MemoryManager } from '../memory-manager.js';
 import { SQLiteManager } from '../sqlite-manager.js';
+import { getCompanionCatalog } from './companion-catalog.js';
 
 export class ResourceHandlers {
   constructor(
@@ -10,6 +11,10 @@ export class ResourceHandlers {
 
   async handleReadResource(uri: string): Promise<string> {
     try {
+      if (uri === 'project-guardian://companions/catalog') {
+        return JSON.stringify({ companions: getCompanionCatalog() });
+      }
+
       // Template resources
       if (uri.startsWith('project-guardian://templates/')) {
         return await this.handleTemplateResource(uri);

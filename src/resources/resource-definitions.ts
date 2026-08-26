@@ -61,4 +61,10 @@ export const projectGuardianResources: Resource[] = [
     description: 'Recent additions, updates, and modifications to the knowledge graph',
     mimeType: 'application/json',
   },
+  {
+    uri: 'project-guardian://companions/catalog',
+    name: 'Guardian Companion Catalog',
+    description: 'Runtime companion capabilities, tools, prerequisites, and availability',
+    mimeType: 'application/json',
+  },
 ];

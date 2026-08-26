@@ -2,8 +2,10 @@ import { RequestHandlers } from '../src/handlers/request-handlers';
 import { SQLiteManager } from '../src/sqlite-manager';
 import { ImportExportManager } from '../src/import-export';
 import { MemoryManager } from '../src/memory-manager';
-import { existsSync, unlinkSync, rmdirSync } from 'fs';
+import { PromptHandlers } from '../src/prompts/prompt-handlers';
+import { existsSync, unlinkSync, rmdirSync, readdirSync } from 'fs';
 import { join } from 'path';
+import { RuntimeCapabilities } from '../src/runtime/runtime-capabilities';
 
 describe('RequestHandlers', () => {
   let sqliteManager: SQLiteManager;
@@ -11,6 +13,8 @@ describe('RequestHandlers', () => {
   let memoryManager: MemoryManager;
   let requestHandlers: RequestHandlers;
   let testDbPath: string;
+  let runtimeCapabilities: RuntimeCapabilities;
+  let inspectedTexts: unknown[];
 
   beforeEach(async () => {
     // Use unique test directory for each test to avoid conflicts
@@ -18,7 +22,20 @@ describe('RequestHandlers', () => {
     sqliteManager = new SQLiteManager(testDbPath);
     importExportManager = new ImportExportManager(sqliteManager);
     memoryManager = new MemoryManager(sqliteManager);
-    requestHandlers = new RequestHandlers(sqliteManager, memoryManager, importExportManager);
+    inspectedTexts = [];
+    runtimeCapabilities = {
+      inspectUntrustedText: (input: unknown) => {
+        inspectedTexts.push(input);
+        return { suspicious: false, alerts: [] };
+      },
+    } as unknown as RuntimeCapabilities;
+    requestHandlers = new RequestHandlers(
+      sqliteManager,
+      memoryManager,
+      importExportManager,
+      new PromptHandlers(),
+      runtimeCapabilities
+    );
 
     await memoryManager.initializeMemoryDatabase();
     await sqliteManager.createDatabase('test_db');
@@ -29,8 +46,7 @@ describe('RequestHandlers', () => {
     // Clean up test database directory
     try {
       if (existsSync(testDbPath)) {
-        const fs = require('fs');
-        const files = fs.readdirSync(testDbPath);
+        const files = readdirSync(testDbPath);
         for (const file of files) {
           if (file.endsWith('.db')) {
             unlinkSync(join(testDbPath, file));
@@ -63,7 +79,7 @@ describe('RequestHandlers', () => {
           { name: 'name', type: 'TEXT' }
         ]
       };
-      await sqliteManager.createTable('test_db', 'test_table', schema);
+      await sqliteManager.createTable('memory', 'test_table', schema);
 
       const result = await requestHandlers.handleToolCall('query_data', {
         table: 'test_table',
@@ -82,7 +98,7 @@ describe('RequestHandlers', () => {
           { name: 'name', type: 'TEXT' }
         ]
       };
-      await sqliteManager.createTable('test_db', 'test_table', schema);
+      await sqliteManager.createTable('memory', 'test_table', schema);
 
       const result = await requestHandlers.handleToolCall('insert_data', {
         table: 'test_table',
@@ -100,8 +116,8 @@ describe('RequestHandlers', () => {
           { name: 'name', type: 'TEXT' }
         ]
       };
-      await sqliteManager.createTable('test_db', 'test_table', schema);
-      await sqliteManager.insertData('test_db', 'test_table', [{ id: 1, name: 'Test' }]);
+      await sqliteManager.createTable('memory', 'test_table', schema);
+      await sqliteManager.insertData('memory', 'test_table', [{ id: 1, name: 'Test' }]);
 
       const result = await requestHandlers.handleToolCall('update_data', {
         table: 'test_table',
@@ -120,8 +136,8 @@ describe('RequestHandlers', () => {
           { name: 'name', type: 'TEXT' }
         ]
       };
-      await sqliteManager.createTable('test_db', 'test_table', schema);
-      await sqliteManager.insertData('test_db', 'test_table', [{ id: 1, name: 'Test' }]);
+      await sqliteManager.createTable('memory', 'test_table', schema);
+      await sqliteManager.insertData('memory', 'test_table', [{ id: 1, name: 'Test' }]);
 
       const result = await requestHandlers.handleToolCall('delete_data', {
         table: 'test_table',
@@ -168,20 +184,28 @@ describe('RequestHandlers', () => {
 
   describe('Error Handling', () => {
     test('should handle non-existent tool', async () => {
-      const result = await requestHandlers.handleToolCall('non_existent_tool', {});
-
-      expect(result).toHaveProperty('success', true);
-      expect(result.content[0].type).toBe('text');
-      expect(result.content[0].text).toContain('not found');
+      await expect(requestHandlers.handleToolCall('non_existent_tool', {}))
+        .rejects.toThrow('Unknown tool: non_existent_tool');
     });
 
     test('should handle invalid tool arguments', async () => {
-      const result = await requestHandlers.handleToolCall('query_data', {
+      await expect(requestHandlers.handleToolCall('query_data', {
         // Missing required 'table' parameter
         conditions: {}
-      });
+      })).rejects.toThrow('Tool execution failed');
+    });
+  });
 
-      expect(result).toHaveProperty('success', true);
+  describe('Runtime Companion Tool Handling', () => {
+    test('should validate and dispatch inspect_untrusted_text', async () => {
+      const result = await requestHandlers.handleToolCall('inspect_untrusted_text', { text: 'safe text' });
+      expect(result).toEqual({ success: true, data: { suspicious: false, alerts: [] } });
+      expect(inspectedTexts).toEqual([{ text: 'safe text' }]);
+    });
+
+    test('should reject unknown runtime arguments', async () => {
+      await expect(requestHandlers.handleToolCall('inspect_untrusted_text', { text: 'safe', extra: true }))
+        .rejects.toThrow('Tool execution failed');
     });
   });
 
@@ -194,8 +218,8 @@ describe('RequestHandlers', () => {
           { name: 'name', type: 'TEXT' }
         ]
       };
-      await sqliteManager.createTable('test_db', 'test_table', schema);
-      await sqliteManager.insertData('test_db', 'test_table', [{ id: 1, name: 'Test' }]);
+      await sqliteManager.createTable('memory', 'test_table', schema);
+      await sqliteManager.insertData('memory', 'test_table', [{ id: 1, name: 'Test' }]);
 
       const result = await requestHandlers.handleToolCall('export_data', {
         table: 'test_table',
