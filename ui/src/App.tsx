@@ -10,6 +10,8 @@ interface Node {
   val: number;
   x?: number;
   y?: number;
+  isObservation?: boolean;
+  parentId?: string;
 }
 
 interface Link {
@@ -28,6 +30,7 @@ function App() {
   const [view, setView] = useState<'project' | 'central'>('central');
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [showObservations, setShowObservations] = useState(true);
   const fgRef = useRef<any>(null);
 
   useEffect(() => {
@@ -35,7 +38,7 @@ function App() {
       .then((res) => res.json())
       .then((json) => {
         const degrees: Record<string, number> = {};
-        const links = json.relations.map((r: any) => {
+        const baseLinks: Link[] = json.relations.map((r: any) => {
           degrees[r.from] = (degrees[r.from] || 0) + 1;
           degrees[r.to] = (degrees[r.to] || 0) + 1;
           return {
@@ -45,12 +48,10 @@ function App() {
           };
         });
         
-        const nodes = json.entities.map((e: any) => {
+        const entityNodes: Node[] = json.entities.map((e: any) => {
           const obsCount = e.observations?.length || 0;
           const linkCount = degrees[e.name] || 0;
-          // Scale node size based on interconnectedness and data density
           const val = Math.max(1, Math.sqrt(obsCount + linkCount));
-          
           return {
             id: e.name,
             name: e.name,
@@ -59,11 +60,37 @@ function App() {
             val
           };
         });
+
+        // Build observation orbs: one node per observation, linked to parent entity
+        const obsNodes: Node[] = [];
+        const obsLinks: Link[] = [];
+        if (showObservations) {
+          json.entities.forEach((e: any) => {
+            (e.observations || []).forEach((obs: string, idx: number) => {
+              const obsId = `${e.name}::obs::${idx}`;
+              const short = obs.length > 48 ? obs.slice(0, 48) + '…' : obs;
+              obsNodes.push({
+                id: obsId,
+                name: short,
+                group: 'observation',
+                observations: [obs],
+                val: 0.7,
+                isObservation: true,
+                parentId: e.name
+              });
+              obsLinks.push({
+                source: e.name,
+                target: obsId,
+                label: 'has_observation'
+              });
+            });
+          });
+        }
         
-        setData({ nodes, links });
+        setData({ nodes: [...entityNodes, ...obsNodes], links: [...baseLinks, ...obsLinks] });
       })
       .catch((err) => console.error('Failed to load graph:', err));
-  }, [view]);
+  }, [view, showObservations]);
 
   return (
     <div className="app-container">
@@ -89,14 +116,23 @@ function App() {
 
           <div className="metrics-row">
             <div className="metric-card">
-              <div className="metric-value">{data.nodes.length}</div>
+              <div className="metric-value">{data.nodes.filter(n => !n.isObservation).length}</div>
               <div className="metric-label">Entities</div>
             </div>
             <div className="metric-card">
+              <div className="metric-value">{data.nodes.filter(n => n.isObservation).length}</div>
+              <div className="metric-label">Orbs</div>
+            </div>
+            <div className="metric-card">
               <div className="metric-value">{data.links.length}</div>
-              <div className="metric-label">Relations</div>
+              <div className="metric-label">Links</div>
             </div>
           </div>
+
+          <label className="obs-toggle" style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, fontSize: '0.85rem', cursor: 'pointer', color: 'var(--text-secondary)' }}>
+            <input type="checkbox" checked={showObservations} onChange={e => setShowObservations(e.target.checked)} />
+            Show observation orbs
+          </label>
         </div>
         
         <div className="sidebar-body">
@@ -157,20 +193,26 @@ function App() {
           linkDirectionalArrowRelPos={1}
           linkLabel="label"
           linkColor={(link: any) => {
+             const isObs = link.label === 'has_observation';
              const isConnected = selectedNode && (
                 link.source === selectedNode.id || link.target === selectedNode.id ||
-                link.source.id === selectedNode.id || link.target.id === selectedNode.id
+                link.source.id === selectedNode.id || link.target.id === selectedNode.id ||
+                (selectedNode.isObservation && link.target === selectedNode.id) ||
+                (selectedNode.parentId && (link.source === selectedNode.parentId || link.target === selectedNode.parentId))
              );
+             if (isObs) return isConnected ? 'rgba(0, 255, 255, 0.9)' : 'rgba(0, 255, 255, 0.25)';
              return isConnected ? 'rgba(0, 255, 0, 0.9)' : 'rgba(0, 255, 0, 0.35)';
           }}
           linkWidth={(link: any) => {
+             const isObs = link.label === 'has_observation';
              const isConnected = selectedNode && (
                 link.source === selectedNode.id || link.target === selectedNode.id ||
                 link.source.id === selectedNode.id || link.target.id === selectedNode.id
              );
+             if (isObs) return isConnected ? 1.5 : 0.8;
              return isConnected ? 2 : 1;
           }}
-          linkDirectionalParticles={2}
+          linkDirectionalParticles={(link: any) => link.label === 'has_observation' ? 1 : 2}
           linkDirectionalParticleWidth={(link: any) => {
              const isConnected = selectedNode && (
                 link.source === selectedNode.id || link.target === selectedNode.id ||
@@ -181,34 +223,58 @@ function App() {
           linkDirectionalParticleSpeed={0.005}
           backgroundColor="transparent"
           nodeCanvasObject={(node: any, ctx, globalScale) => {
-            // Calculate neon color based on group
-            let hash = 0;
-            for (let i = 0; i < node.group.length; i++) {
-              hash = node.group.charCodeAt(i) + ((hash << 5) - hash);
-            }
-            const hue = Math.abs(hash) % 360;
             const isSelected = node.id === selectedNode?.id;
-            const color = isSelected ? '#FFFFFF' : `hsl(${hue}, 100%, 60%)`;
+            const isObs = !!node.isObservation;
+            let color: string;
+            let size: number;
+            if (isObs) {
+              color = isSelected ? '#FFFFFF' : 'rgba(0, 255, 255, 0.95)';
+              size = Math.max(1.5, node.val * 2.2);
+              // outer glow
+              ctx.beginPath();
+              ctx.arc(node.x, node.y, size + 2, 0, 2 * Math.PI, false);
+              ctx.fillStyle = 'rgba(0, 255, 255, 0.15)';
+              ctx.fill();
+              // core orb - hollow style with inner fill
+              ctx.beginPath();
+              ctx.arc(node.x, node.y, size, 0, 2 * Math.PI, false);
+              ctx.fillStyle = isSelected ? '#FFFFFF' : 'rgba(20, 40, 40, 0.9)';
+              ctx.strokeStyle = color;
+              ctx.lineWidth = 1.2;
+              ctx.shadowColor = color;
+              ctx.shadowBlur = 8;
+              ctx.fill();
+              ctx.stroke();
+              ctx.shadowBlur = 0;
+              // inner dot
+              ctx.beginPath();
+              ctx.arc(node.x, node.y, size * 0.35, 0, 2 * Math.PI, false);
+              ctx.fillStyle = color;
+              ctx.fill();
+            } else {
+              let hash = 0;
+              for (let i = 0; i < node.group.length; i++) {
+                hash = node.group.charCodeAt(i) + ((hash << 5) - hash);
+              }
+              const hue = Math.abs(hash) % 360;
+              color = isSelected ? '#FFFFFF' : `hsl(${hue}, 100%, 60%)`;
+              size = Math.max(2, node.val * 3);
+              ctx.beginPath();
+              ctx.arc(node.x, node.y, size, 0, 2 * Math.PI, false);
+              ctx.fillStyle = color;
+              ctx.shadowColor = color;
+              ctx.shadowBlur = 10;
+              ctx.fill();
+              ctx.shadowBlur = 0;
+            }
             
-            const size = Math.max(2, node.val * 3);
-
-            // Draw glowing circle
-            ctx.beginPath();
-            ctx.arc(node.x, node.y, size, 0, 2 * Math.PI, false);
-            ctx.fillStyle = color;
-            ctx.shadowColor = color;
-            ctx.shadowBlur = 10;
-            ctx.fill();
-            ctx.shadowBlur = 0; // reset
-            
-            // Draw text label on canvas if zoomed in enough or if node is selected
             if (globalScale > 1.5 || isSelected) {
               const label = node.name;
-              const fontSize = 12 / globalScale;
+              const fontSize = isObs ? 9 / globalScale : 12 / globalScale;
               ctx.font = `${fontSize}px VT323, monospace`;
               ctx.textAlign = 'center';
               ctx.textBaseline = 'top';
-              ctx.fillStyle = isSelected ? '#FFFFFF' : 'rgba(0, 255, 0, 0.8)';
+              ctx.fillStyle = isSelected ? '#FFFFFF' : isObs ? 'rgba(0, 255, 255, 0.85)' : 'rgba(0, 255, 0, 0.8)';
               ctx.fillText(label, node.x, node.y + size + (4 / globalScale));
             }
           }}
@@ -222,24 +288,40 @@ function App() {
       {selectedNode && (
         <aside className="right-panel">
           <div className="node-header">
-            <h2 className="node-title">{selectedNode.name}</h2>
+            <h2 className="node-title" style={{ wordBreak: 'break-word' }}>{selectedNode.name}</h2>
             <button className="close-btn" onClick={() => setSelectedNode(null)}>
               [X]
             </button>
           </div>
           
-          <span className="node-badge">CLASS: {selectedNode.group}</span>
+          <span className="node-badge">CLASS: {selectedNode.group}{selectedNode.isObservation ? ' • ORB' : ''}</span>
+          {selectedNode.isObservation && selectedNode.parentId && (
+            <div style={{ fontSize: '0.85rem', color: 'rgba(0,255,255,0.8)', marginBottom: 10 }}>
+              PARENT: {selectedNode.parentId} <button style={{ marginLeft: 6, background: 'transparent', border: '1px solid rgba(0,255,255,0.4)', color: 'rgba(0,255,255,0.9)', cursor: 'pointer', padding: '1px 6px', fontFamily: 'VT323' }} onClick={() => {
+                const parent = data.nodes.find(n => n.id === selectedNode.parentId);
+                if (parent) {
+                  setSelectedNode(parent);
+                  if (fgRef.current && parent.x !== undefined) {
+                    fgRef.current.centerAt(parent.x, parent.y, 800);
+                    fgRef.current.zoom(3.5, 800);
+                  }
+                }
+              }}>[GO TO PARENT]</button>
+            </div>
+          )}
           
           <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
              <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
                 LINKS: {data.links.filter(l => l.source === selectedNode.id || l.target === selectedNode.id || (l.source as any).id === selectedNode.id || (l.target as any).id === selectedNode.id).length}
              </span>
-             <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-                OBSERVATIONS: {selectedNode.observations.length}
-             </span>
+             {!selectedNode.isObservation && (
+               <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
+                  OBSERVATIONS: {selectedNode.observations.length}
+               </span>
+             )}
           </div>
 
-          <h3 className="section-title">Surveillance Logs</h3>
+          <h3 className="section-title">{selectedNode.isObservation ? 'Orb Payload' : 'Surveillance Logs'}</h3>
           {selectedNode.observations.length > 0 ? (
             <ul className="observations-list">
               {selectedNode.observations.map((obs, i) => (
