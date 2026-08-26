@@ -117,6 +117,16 @@ function App() {
     if (!showObservations) setExpandedEntities(new Set());
   }, [showObservations, view]);
 
+  const entityCount = data.nodes.filter(n => !n.isObservation).length;
+  const filteredNodes = data.nodes
+    .filter(n => !n.isObservation)
+    .filter(n => {
+      if (!searchQuery.trim()) return true;
+      const q = searchQuery.toLowerCase();
+      return n.name.toLowerCase().includes(q) || n.group.toLowerCase().includes(q);
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
+
   return (
     <div className="app-container">
       {/* Left Sidebar (Global Config & Metrics) */}
@@ -176,7 +186,7 @@ function App() {
         </div>
         
         <div className="sidebar-body">
-          <div style={{ marginBottom: 20 }}>
+          <div style={{ marginBottom: 12 }}>
             <input 
               type="text" 
               className="search-input" 
@@ -184,37 +194,55 @@ function App() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: 6, display: 'flex', justifyContent: 'space-between' }}>
+              <span>{filteredNodes.length} / {entityCount} ENTITIES</span>
+              <span>{entityCount === 0 ? 'LOADING...' : 'SORTED A-Z'}</span>
+            </div>
           </div>
 
-          {searchQuery.trim() === '' ? (
+          {entityCount === 0 ? (
             <div className="empty-state">
               <p>SYSTEM STATUS: ONLINE</p>
               <p style={{ marginTop: 20, fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-                AWAITING COMMAND INPUT...
+                LOADING KNOWLEDGE GRAPH...
               </p>
             </div>
+          ) : filteredNodes.length === 0 ? (
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>[NO MATCHES FOUND]</p>
           ) : (
-            <div className="search-results">
-              {data.nodes
-                .filter(n => n.name.toLowerCase().includes(searchQuery.toLowerCase()))
-                .map(node => (
+            <div className="search-results" style={{ maxHeight: '55vh', overflowY: 'auto', paddingRight: 4 }}>
+              {filteredNodes.map(node => {
+                const isSelected = selectedNode?.id === node.id;
+                return (
                   <div 
                     key={node.id} 
                     className="search-result-item"
+                    style={{
+                      borderColor: isSelected ? 'var(--accent-color)' : 'transparent',
+                      color: isSelected ? 'var(--text-primary)' : undefined,
+                      background: isSelected ? 'rgba(0, 255, 0, 0.08)' : undefined
+                    }}
                     onClick={() => {
                       setSelectedNode(node);
                       if (fgRef.current && node.x !== undefined && node.y !== undefined) {
                         fgRef.current.centerAt(node.x, node.y, 1000);
                         fgRef.current.zoom(4, 1000);
+                      } else if (fgRef.current) {
+                        // node not yet positioned — zoom out to find it after next render
+                        fgRef.current.zoomToFit(600);
                       }
                     }}
                   >
-                    &gt; {node.name}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>&gt; {node.name}</span>
+                      <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', border: '1px solid var(--border-color)', padding: '1px 4px', flexShrink: 0 }}>{node.group}</span>
+                    </div>
+                    <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: 2 }}>
+                      {node.observations.length} obs • {data.links.filter(l => l.source === node.id || l.target === node.id || (l.source as any).id === node.id || (l.target as any).id === node.id).length} links
+                    </div>
                   </div>
-                ))}
-              {data.nodes.filter(n => n.name.toLowerCase().includes(searchQuery.toLowerCase())).length === 0 && (
-                <p style={{ color: 'var(--text-secondary)' }}>[NO MATCHES FOUND]</p>
-              )}
+                );
+              })}
             </div>
           )}
         </div>
