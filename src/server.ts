@@ -1,3 +1,4 @@
+import { UIManager } from './ui-manager.js';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
@@ -35,6 +36,7 @@ export class DatabaseMCPServer {
   private promptHandlers: PromptHandlers;
   private requestHandlers: RequestHandlers;
   private runtimeCapabilities: RuntimeCapabilities;
+  private uiManager: UIManager;
 
   constructor() {
     // Single source of truth for the project root:
@@ -71,6 +73,7 @@ export class DatabaseMCPServer {
     );
 
     // Initialize modular handlers
+    this.uiManager = new UIManager(this.memoryManager);
     this.resourceHandlers = new ResourceHandlers(this.memoryManager, this.sqliteManager);
     this.promptHandlers = new PromptHandlers();
     this.requestHandlers = new RequestHandlers(
@@ -78,7 +81,8 @@ export class DatabaseMCPServer {
       this.memoryManager, 
       this.importExportManager,
       this.promptHandlers,
-      this.runtimeCapabilities
+      this.runtimeCapabilities,
+      this.uiManager.start.bind(this.uiManager)
     );
 
     this.server = new Server(
@@ -239,7 +243,7 @@ export class DatabaseMCPServer {
 
     const shutdown = async () => {
       await Promise.race([
-        Promise.allSettled([this.sqliteManager.closeAllConnections(), this.runtimeCapabilities.close()]),
+        Promise.allSettled([this.sqliteManager.closeAllConnections(), this.runtimeCapabilities.close(), this.uiManager.stop()]),
         new Promise(resolve => setTimeout(resolve, 5000))
       ]);
       process.exit(0);

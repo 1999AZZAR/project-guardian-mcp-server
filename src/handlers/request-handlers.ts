@@ -66,7 +66,8 @@ export class RequestHandlers {
     private memoryManager: MemoryManager,
     private importExportManager: ImportExportManager,
     private promptHandlers: PromptHandlers,
-    private runtimeCapabilities?: RuntimeCapabilities
+    private runtimeCapabilities?: RuntimeCapabilities,
+    private startUI?: () => Promise<number>
   ) {}
 
   async handleToolCall(name: string, args: any): Promise<any> {
@@ -99,6 +100,15 @@ export class RequestHandlers {
       if (runtimeToolNames.has(name)) {
         if (!this.runtimeCapabilities) throw new Error('Runtime companions are unavailable');
         return { success: true, data: await this.handleRuntimeTool(name, args) };
+      }
+
+      if (name === 'start_ui') {
+        if (!this.startUI) throw new Error('UI Server is not available');
+        const port = await this.startUI();
+        return {
+          success: true,
+          message: `UI Server successfully started on http://localhost:${port}`
+        };
       }
 
       throw new Error(`Unknown tool: ${name}`);

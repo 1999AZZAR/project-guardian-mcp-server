@@ -27,6 +27,46 @@ export class MemoryManager {
       : path.join(homedir(), 'memory', 'memory.db');
   }
 
+  private async ensureFtsSchema(dbName: string): Promise<void> {
+    await this.sqliteManager.executeSql(dbName, `
+      CREATE VIRTUAL TABLE IF NOT EXISTS entities_fts USING fts5(
+        name, 
+        entity_type, 
+        observations,
+        content='entities',
+        content_rowid='rowid'
+      );
+    `);
+
+    await this.sqliteManager.executeSql(dbName, `
+      CREATE TRIGGER IF NOT EXISTS entities_ai AFTER INSERT ON entities BEGIN
+        INSERT INTO entities_fts(rowid, name, entity_type, observations) 
+        VALUES (new.rowid, new.name, new.entity_type, new.observations);
+      END;
+    `);
+
+    await this.sqliteManager.executeSql(dbName, `
+      CREATE TRIGGER IF NOT EXISTS entities_ad AFTER DELETE ON entities BEGIN
+        INSERT INTO entities_fts(entities_fts, rowid, name, entity_type, observations) 
+        VALUES('delete', old.rowid, old.name, old.entity_type, old.observations);
+      END;
+    `);
+
+    await this.sqliteManager.executeSql(dbName, `
+      CREATE TRIGGER IF NOT EXISTS entities_au AFTER UPDATE ON entities BEGIN
+        INSERT INTO entities_fts(entities_fts, rowid, name, entity_type, observations) 
+        VALUES('delete', old.rowid, old.name, old.entity_type, old.observations);
+        INSERT INTO entities_fts(rowid, name, entity_type, observations) 
+        VALUES (new.rowid, new.name, new.entity_type, new.observations);
+      END;
+    `);
+
+    // Backfill FTS index if it was just created or if it went out of sync
+    await this.sqliteManager.executeSql(dbName, `
+      INSERT INTO entities_fts(entities_fts) VALUES('rebuild');
+    `);
+  }
+
   setTargetRoot(targetRoot: string): void {
     this.targetRoot = targetRoot;
   }
@@ -53,6 +93,8 @@ export class MemoryManager {
         { name: 'idx_central_relations_unique', columns: ['from_entity', 'to_entity', 'relation_type'], unique: true }
       ]
     });
+    
+    await this.ensureFtsSchema(this.centralDbPath);
   }
 
   async syncToCentral(): Promise<{ entities: number; relations: number }> {
@@ -361,6 +403,7 @@ export class MemoryManager {
     if (!updatedIndexResult.success) {
       console.warn('Failed to create entity updated index:', updatedIndexResult.error);
     }
+    await this.ensureFtsSchema(this.memoryDbName);
 
     // Scattered DB consolidation — DESTRUCTIVE (merges nested memory.db files
     // into the root and deletes them, destroying per-project isolation).
@@ -669,7 +712,7 @@ export class MemoryManager {
     return { entities: [...entities.values()], relations: [...relations.values()] };
   }
 
-  private async readStore(database: string): Promise<KnowledgeGraph> {
+  async readStore(database: string): Promise<KnowledgeGraph> {
     const entitiesResult = await this.sqliteManager.queryData(database, 'entities', {});
     const relationsResult = await this.sqliteManager.queryData(database, 'relations', {});
     return {
@@ -709,26 +752,36 @@ export class MemoryManager {
   }
 
   async searchNodes(query: string): Promise<SearchResult> {
-    const searchTerm = `%${query.toLowerCase()}%`;
+    // Sanitize query to prevent FTS syntax errors
+    const sanitizedQuery = query.replace(/[^a-zA-Z0-9_\s]/g, ' ').trim().replace(/\s+/g, ' OR ');
+    
+    // Fallback to basic LIKE if query is empty after sanitization
+    if (!sanitizedQuery) {
+      return { entities: [], relations: [] };
+    }
 
-    // Search entities by name, type, or observations
+    // Search entities using FTS5 BM25 ranking
     const entitiesQuery = `
-      SELECT * FROM entities
-      WHERE LOWER(name) LIKE ? OR LOWER(entity_type) LIKE ? OR LOWER(observations) LIKE ?
+      SELECT e.* 
+      FROM entities e
+      JOIN entities_fts fts ON e.rowid = fts.rowid
+      WHERE entities_fts MATCH ?
+      ORDER BY bm25(entities_fts)
+      LIMIT 20
     `;
 
-    // Search relations by relation type
+    // Relations don't have FTS, keep LIKE but scoped to the sanitized terms
+    const searchTerm = `%${query.toLowerCase()}%`;
     const relationsQuery = `
       SELECT * FROM relations
       WHERE LOWER(relation_type) LIKE ? OR LOWER(from_entity) LIKE ? OR LOWER(to_entity) LIKE ?
     `;
 
-    const params = [searchTerm, searchTerm, searchTerm];
     const [projectEntities, projectRelations, centralEntities, centralRelations] = await Promise.all([
-      this.sqliteManager.executeSql(this.memoryDbName, entitiesQuery, params),
-      this.sqliteManager.executeSql(this.memoryDbName, relationsQuery, params),
-      this.sqliteManager.executeSql(this.centralDbPath, entitiesQuery, params),
-      this.sqliteManager.executeSql(this.centralDbPath, relationsQuery, params)
+      this.sqliteManager.executeSql(this.memoryDbName, entitiesQuery, [sanitizedQuery]),
+      this.sqliteManager.executeSql(this.memoryDbName, relationsQuery, [searchTerm, searchTerm, searchTerm]),
+      this.sqliteManager.executeSql(this.centralDbPath, entitiesQuery, [sanitizedQuery]),
+      this.sqliteManager.executeSql(this.centralDbPath, relationsQuery, [searchTerm, searchTerm, searchTerm])
     ]);
 
     const toEntities = (result: { success: boolean; data?: any }) =>

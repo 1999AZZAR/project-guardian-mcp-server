@@ -9,6 +9,15 @@ export const allTools: Tool[] = [
   ...memoryTools,
   ...guidanceTools,
   ...runtimeTools,
+  {
+    name: 'start_ui',
+    description: 'Start the Project Guardian Web UI server on demand. Automatically searches for a free port and returns the local HTTP URL.',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+      required: []
+    }
+  }
 ];
 
-export { databaseTools, memoryTools, guidanceTools, runtimeTools };
+;
