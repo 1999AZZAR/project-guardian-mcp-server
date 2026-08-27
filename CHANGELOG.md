@@ -2,6 +2,18 @@
 
 All notable changes to Project Guardian MCP.
 
+## [2.0.0-beta-2] - 2026-08-27
+
+### Added
+- **Scale: Cursor streaming** — `readGraphStream(cursor base64url {updated_at,name}, limit 500 cap 1000)` + `MCP read_graph_stream` + `GET /api/graph/stream?cursor=&limit=` (34 tools total, was 33) + `POST /api/vacuum` (`fa033ec`/`c2dd6ca`/`e43ca01`)
+- **UI: Virtual + streaming LOD** — `react-window 1.8.11` `FixedSizeList 420h 56h` for `>50` entities (was 50-slice SHOW MORE), central view incremental streaming 500/page, auto-collapse `>300` (cluster) `>400` disable orbs (`c2dd6ca`)
+- **UI: >1k physics freeze** — `cooldownTicks 0 d3AlphaDecay 1 d3VelocityDecay 1` when `nodes>1000` (deck.gl WebGL TODO for 10k)
+- **DB: VACUUM + journal cap** — `PRAGMA journal_size_limit=67108864` (64M) + `vacuumDatabase()` + `vacuumDatabases()` self-schedule 30d (`fa033ec`)
+
+### Changed
+- **UI bundle** — `index-B2DK7m-f.js 403k` (was `COU8SsoH.js` 391k / `B2DK7m-f` after phase2)
+- **E2E** — `93/93` still pass (10 suites), `GET /api/graph/stream` + `POST /api/vacuum` + `hybrid search vector` + `stream pagination` verified live
+
 ## [2.0.0-beta-1] - 2026-08-27
 
 ### Added
