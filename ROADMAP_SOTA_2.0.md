@@ -1,18 +1,18 @@
 # Project Guardian SOTA Roadmap — 1.1.0 → 2.0.0
 
-> Documented 2026-08-26 as TODO for review. Updated 2026-08-26: **Provider A chosen** (`@xenova/transformers` local). No implementation yet — todo only.
+> Documented 2026-08-26 as TODO. Updated 2026-08-27: **Provider A chosen** + **POC done on feat/vector-rag-poc** (hybrid RAG, backfill, UI wiring, e2e pass). No merge to master yet — todo updated first.
 
 ## Goal
 From niche SOTA (local-first Git-aware knowledge graph) to universal SOTA (hybrid RAG + streaming + observable).
 
-## Phase 1 — Vector Hybrid RAG (8-12d) — **NEXT — CHOSEN A (local)**
+## Phase 1 — Vector Hybrid RAG (8-12d) — **POC DONE on feat/vector-rag-poc (A local)**
 - [x] **Chosen: A** `@xenova/transformers` `all-MiniLM-L6-v2` (local 80MB, 384d, offline) — decision 2026-08-26
-- [ ] Schema: `embeddings(entity_name PK, embedding BLOB, model TEXT, updated_at)` + `sqlite-vec0`
-- [ ] Worker: batch queue 10 obs / 100ms, on `createEntity`/`addObservation`/`updateData`
-- [ ] Hybrid: `RRF(BM25, cosine)` or `0.5*normBM25+0.5*cosine`, `search_nodes {mode, alpha, limit}` + `vector_search`
-- [ ] Migrate: `PRAGMA user_version 1→2`, backfill `SELECT name,observations → embed`
-- [ ] Risks: `sqlite-vec` native build, model size, 7.6MB/5k cap
-- [ ] Accept: `hybrid` finds semantic misses of `keyword`
+- [x] Schema: `embeddings` + `vec_entities vec0(embedding float[384])` via `ensureProjectSchema`/`ensureCentralSchema` (WAL + `createRequire` fallback for Jest)
+- [x] Worker: immediate `upsertVec` on `createEntity`/`addObservation`/`delete` (batch queue TODO for 2.0)
+- [x] Hybrid: `RRF k=60` merging FTS `BM25` + `vec0` cosine, `search_nodes {mode: keyword|vector|hybrid, limit}` + `GET /api/search?q=&mode=&limit=`
+- [x] Migrate: `scripts/backfill_vec.mjs` — `central 105` + `project 76` vec rows, `PRAGMA user_version` bump pending
+- [x] Risks: `sqlite-vec` `import.meta.resolve` Jest fix via `createRequire`, mock `Float32Array` realm fix, 7.6MB/5k cap noted
+- [x] Accept: `hybrid` finds semantic miss (`authentication` → `auth-login` top, `93/93` tests, `e2e` `2/2` pass, `b4d4b1d`)
 
 ## Phase 2 — Scale & Streaming (5-7d)
 - [ ] `read_graph_stream` cursor `{updated_at, name}` paginated 500/page, `GET /api/graph?cursor=`
@@ -30,8 +30,8 @@ From niche SOTA (local-first Git-aware knowledge graph) to universal SOTA (hybri
 - [ ] `2.0.0` breaking, CHANGELOG, CI audit gate
 
 ## Decisions
-- [x] Provider **A** chosen 2026-08-26 (update todo only, no impl yet)
-- [ ] Start Phase 1 branch `feat/vector-rag` ? — pending user go-ahead
+- [x] Provider **A** chosen 2026-08-26
+- [x] Branch `feat/vector-rag-poc` created `2772572` + `b4d4b1d` e2e + `673a238` backfill/UI wiring — POC done, todo updated first per user, no merge to master yet
 
 ## References
-- Current: 33 tools, 91 tests, 0 vulns, WAL, pagination, `c2085a3` flex, `0398ef8` mobile gate, `2d93547` always-list
+- Current (feat): 33 tools, 93 tests (91+2 e2e), 0 vulns (master) / 5 vulns (feat with @xenova), WAL, pagination, `c2085a3` flex, `0398ef8` mobile gate, `2d93547` always-list, `COU8SsoH.js` hybrid search UI, `105/76` vec backfilled
