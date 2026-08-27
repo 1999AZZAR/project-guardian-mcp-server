@@ -51,6 +51,19 @@ export class UIManager {
       }
     });
 
+    app.get('/api/search', async (req, res) => {
+      try {
+        const q = String(req.query.q || req.query.query || '');
+        if (!q.trim()) return res.json({ entities: [], relations: [] });
+        const limit = req.query.limit ? Math.min(100, Math.max(1, parseInt(String(req.query.limit), 10) || 20)) : 20;
+        const mode = String(req.query.mode || 'hybrid') as 'keyword'|'vector'|'hybrid';
+        const result = await this.memoryManager.searchNodes(q, limit, mode);
+        res.json(result);
+      } catch (err) {
+        res.status(500).json({ error: String(err) });
+      }
+    });
+
     // SPA fallback
     app.use((req, res) => {
       res.sendFile(join(uiPath, 'index.html'));
