@@ -1,11 +1,11 @@
 # Project Guardian SOTA Roadmap — 1.1.0 → 2.0.0
 
-> Documented 2026-08-26 as TODO. Updated 2026-08-27: **Provider A chosen** + **POC done on feat/vector-rag-poc** (hybrid RAG, backfill, UI wiring, e2e pass). No merge to master yet — todo updated first.
+> Documented 2026-08-26 as TODO. Updated 2026-08-27: **Provider A chosen** + **POC done** `b4d4b1d`/`673a238` + **merged to master** `f7876bf` as **2.0.0-beta-1** `6948910` (`v2.0.0-beta-1` tag).
 
 ## Goal
 From niche SOTA (local-first Git-aware knowledge graph) to universal SOTA (hybrid RAG + streaming + observable).
 
-## Phase 1 — Vector Hybrid RAG (8-12d) — **POC DONE on feat/vector-rag-poc (A local)**
+## Phase 1 — Vector Hybrid RAG (8-12d) — **DONE in 2.0.0-beta-1 (A local)**
 - [x] **Chosen: A** `@xenova/transformers` `all-MiniLM-L6-v2` (local 80MB, 384d, offline) — decision 2026-08-26
 - [x] Schema: `embeddings` + `vec_entities vec0(embedding float[384])` via `ensureProjectSchema`/`ensureCentralSchema` (WAL + `createRequire` fallback for Jest)
 - [x] Worker: immediate `upsertVec` on `createEntity`/`addObservation`/`delete` (batch queue TODO for 2.0)
