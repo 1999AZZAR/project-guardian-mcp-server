@@ -32,6 +32,8 @@ function App() {
   const [view, setView] = useState<'project' | 'central'>('central');
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchMode, setSearchMode] = useState<'keyword'|'vector'|'hybrid'>('hybrid');
+  const [searchResults, setSearchResults] = useState<Node[] | null>(null);
   const [showObservations, setShowObservations] = useState(false);
   const [expandedEntities, setExpandedEntities] = useState<Set<string>>(new Set());
   const fgRef = useRef<any>(null);
@@ -112,6 +114,30 @@ function App() {
       .catch((err) => console.error('Failed to load graph:', err));
   }, [view, showObservations, expandedEntities]);
 
+  // Hybrid search: call /api/search when query >=2 chars
+  useEffect(() => {
+    const q = searchQuery.trim();
+    if (q.length < 2) {
+      setSearchResults(null);
+      return;
+    }
+    const ctrl = new AbortController();
+    fetch(`/api/search?q=${encodeURIComponent(q)}&mode=${searchMode}&limit=20`, { signal: ctrl.signal })
+      .then(r => r.json())
+      .then(json => {
+        const nodes: Node[] = (json.entities || []).map((e: any) => ({
+          id: e.name,
+          name: e.name,
+          group: e.entityType,
+          observations: e.observations || [],
+          val: Math.max(1, Math.sqrt((e.observations?.length || 0))),
+        }));
+        setSearchResults(nodes);
+      })
+      .catch(() => setSearchResults(null));
+    return () => ctrl.abort();
+  }, [searchQuery, searchMode]);
+
   // Reset expanded when toggling off or switching view to avoid stale clusters
   useEffect(() => {
     if (!showObservations) setExpandedEntities(new Set());
@@ -133,7 +159,7 @@ function App() {
   }, []);
 
   const entityCount = data.nodes.filter(n => !n.isObservation).length;
-  const filteredNodes = data.nodes
+  const baseFiltered = data.nodes
     .filter(n => !n.isObservation)
     .filter(n => {
       if (!searchQuery.trim()) return true;
@@ -141,6 +167,7 @@ function App() {
       return n.name.toLowerCase().includes(q) || n.group.toLowerCase().includes(q);
     })
     .sort((a, b) => a.name.localeCompare(b.name));
+  const filteredNodes = searchResults !== null ? searchResults : baseFiltered;
 
   return (
     <div className="app-container">
@@ -233,9 +260,16 @@ function App() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
+            <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+              <select className="custom-select" value={searchMode} onChange={e => setSearchMode(e.target.value as any)} style={{ flex: 1, fontSize: '0.8rem', padding: '6px 8px' }}>
+                <option value="hybrid">HYBRID (FTS+VECTOR)</option>
+                <option value="keyword">KEYWORD (FTS)</option>
+                <option value="vector">VECTOR</option>
+              </select>
+            </div>
             <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: 6, display: 'flex', justifyContent: 'space-between' }}>
-              <span>{filteredNodes.length} / {entityCount} ENTITIES</span>
-              <span>{entityCount === 0 ? 'LOADING...' : 'SORTED A-Z'}</span>
+              <span>{filteredNodes.length} / {entityCount} ENTITIES {searchResults !== null ? `• ${searchMode.toUpperCase()}` : ''}</span>
+              <span>{entityCount === 0 ? 'LOADING...' : searchResults !== null ? 'HYBRID RANKED' : 'SORTED A-Z'}</span>
             </div>
           </div>
 
