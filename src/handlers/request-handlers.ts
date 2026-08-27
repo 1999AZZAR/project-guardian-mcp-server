@@ -8,7 +8,7 @@ import {
   DeleteDataSchema, ImportFromFileSchema, ExportToFileSchema,
   CreateEntitiesSchema, CreateRelationsSchema, AddObservationsSchema,
   DeleteEntitiesSchema, DeleteObservationsSchema, DeleteRelationsSchema,
-  SearchNodesSchema, OpenNodesSchema, ReadGraphSchema
+  SearchNodesSchema, OpenNodesSchema, ReadGraphSchema, ReadGraphStreamSchema
 } from '../types.js';
 import {
   AnalyzeGitChangesSchema, CacheDeleteSchema, CacheGetSchema, CacheScanSchema, CacheSetSchema,
@@ -25,6 +25,7 @@ const execFileAsync = promisify(execFile);
 const DatabaseSelector = z.enum(['project', 'central']).default('project');
 
 const toolSchemas: Record<string, z.ZodSchema> = {
+  read_graph_stream: ReadGraphStreamSchema,
   execute_sql: ExecuteSqlSchema.omit({ database: true }).extend({ database: DatabaseSelector }),
   query_data: QueryDataSchema.omit({ database: true }).extend({ database: DatabaseSelector }),
   insert_data: InsertDataSchema.omit({ database: true }).extend({ database: DatabaseSelector }),
@@ -288,6 +289,11 @@ export class RequestHandlers {
         }
         const graph = await this.memoryManager.readGraph({ limit: args.limit, offset: args.offset });
         return { success: true, data: graph };
+      }
+
+      case 'read_graph_stream': {
+        const stream = await this.memoryManager.readGraphStream(args.cursor, args.limit);
+        return { success: true, data: stream };
       }
 
       case 'search_nodes': {

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { FixedSizeList as List } from 'react-window';
 import ForceGraph2D from 'react-force-graph-2d';
 import './App.css';
 
@@ -39,9 +40,48 @@ function App() {
   const fgRef = useRef<any>(null);
 
   useEffect(() => {
-    fetch(`/api/graph/${view}`)
-      .then((res) => res.json())
-      .then((json) => {
+    const ctrl = new AbortController();
+    // Phase 2 streaming: for central view use cursor pagination 500/page via /api/graph/stream, else single fetch for project
+    const load = async () => {
+      try {
+        let json: any;
+        if (view === 'central') {
+          let allEntities: any[] = [];
+          let allRelations: any[] = [];
+          let cursor: string | undefined = undefined;
+          do {
+            const url = cursor ? `/api/graph/stream?cursor=${encodeURIComponent(cursor)}&limit=500` : `/api/graph/stream?limit=500`;
+            const res = await fetch(url, { signal: ctrl.signal });
+            const page = await res.json();
+            allEntities = allEntities.concat(page.entities || []);
+            allRelations = allRelations.concat(page.relations || []);
+            cursor = page.nextCursor || undefined;
+            if (ctrl.signal.aborted) break;
+            // incremental render for large graphs
+            json = { entities: allEntities, relations: allRelations };
+            if (cursor) {
+              // still more — render partial to keep UI responsive
+              const degrees: Record<string, number> = {};
+              const baseLinks: any[] = json.relations.map((r: any) => {
+                degrees[r.from] = (degrees[r.from] || 0) + 1;
+                degrees[r.to] = (degrees[r.to] || 0) + 1;
+                return { source: r.from, target: r.to, label: r.relationType };
+              });
+              const entityNodes: any[] = json.entities.map((e: any) => ({
+                id: e.name, name: e.name, group: e.entityType, observations: e.observations || [], val: Math.max(1, Math.sqrt((e.observations?.length || 0) + (degrees[e.name] || 0)))
+              }));
+              // deck.gl hint: >1k nodes will auto-disable physics (see ForceGraph props)
+              setData({ nodes: entityNodes, links: baseLinks });
+            }
+          } while (cursor);
+          json = { entities: allEntities, relations: allRelations };
+        } else {
+          const res = await fetch(`/api/graph/${view}`, { signal: ctrl.signal });
+          json = await res.json();
+        }
+        if (ctrl.signal.aborted) return;
+        // full render below
+
         const degrees: Record<string, number> = {};
         const baseLinks: Link[] = json.relations.map((r: any) => {
           degrees[r.from] = (degrees[r.from] || 0) + 1;
@@ -110,8 +150,12 @@ function App() {
         }
         
         setData({ nodes: [...entityNodes, ...obsNodes], links: [...baseLinks, ...obsLinks] });
-      })
-      .catch((err) => console.error('Failed to load graph:', err));
+      } catch (err) {
+        if (!(err as any)?.name?.includes('Abort')) console.error('Failed to load graph:', err);
+      }
+    };
+    load();
+    return () => ctrl.abort();
   }, [view, showObservations, expandedEntities]);
 
   // Hybrid search: call /api/search when query >=2 chars
@@ -144,7 +188,17 @@ function App() {
   }, [showObservations, view]);
 
   const [isMobile, setIsMobile] = useState(false);
+  // LOD: auto-collapse orbs when graph >300 nodes to keep 60fps
   const [mobileDismissed, setMobileDismissed] = useState(false);
+
+  useEffect(() => {
+    if (data.nodes.length > 300 && (showObservations || expandedEntities.size > 0)) {
+      // auto-collapse to clusters to keep under 300
+      if (expandedEntities.size > 0) setExpandedEntities(new Set());
+      // keep showObservations as is, but clusters still <300; if still >300, disable orbs entirely
+      if (data.nodes.length > 400 && showObservations) setShowObservations(false);
+    }
+  }, [data.nodes.length, showObservations, expandedEntities.size]);
 
   useEffect(() => {
     const check = () => {
@@ -283,39 +337,79 @@ function App() {
           ) : filteredNodes.length === 0 ? (
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>[NO MATCHES FOUND]</p>
           ) : (
-            <div className="search-results" style={{ maxHeight: '55vh', overflowY: 'auto', paddingRight: 4 }}>
-              {filteredNodes.map(node => {
-                const isSelected = selectedNode?.id === node.id;
-                return (
-                  <div 
-                    key={node.id} 
-                    className="search-result-item"
-                    style={{
-                      borderColor: isSelected ? 'var(--accent-color)' : 'transparent',
-                      color: isSelected ? 'var(--text-primary)' : undefined,
-                      background: isSelected ? 'rgba(0, 255, 0, 0.08)' : undefined
-                    }}
-                    onClick={() => {
-                      setSelectedNode(node);
-                      if (fgRef.current && node.x !== undefined && node.y !== undefined) {
-                        fgRef.current.centerAt(node.x, node.y, 1000);
-                        fgRef.current.zoom(4, 1000);
-                      } else if (fgRef.current) {
-                        // node not yet positioned — zoom out to find it after next render
-                        fgRef.current.zoomToFit(600);
-                      }
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>&gt; {node.name}</span>
-                      <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', border: '1px solid var(--border-color)', padding: '1px 4px', flexShrink: 0 }}>{node.group}</span>
-                    </div>
-                    <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: 2 }}>
-                      {node.observations.length} obs • {data.links.filter(l => l.source === node.id || l.target === node.id || (l.source as any).id === node.id || (l.target as any).id === node.id).length} links
-                    </div>
-                  </div>
-                );
-              })}
+            <div className="search-results" style={{ paddingRight: 4 }}>
+              {filteredNodes.length <= 50 ? (
+                <div style={{ maxHeight: '55vh', overflowY: 'auto' }}>
+                  {filteredNodes.map(node => {
+                    const isSelected = selectedNode?.id === node.id;
+                    return (
+                      <div
+                        key={node.id}
+                        className="search-result-item"
+                        style={{
+                          borderColor: isSelected ? 'var(--accent-color)' : 'transparent',
+                          color: isSelected ? 'var(--text-primary)' : undefined,
+                          background: isSelected ? 'rgba(0, 255, 0, 0.08)' : undefined
+                        }}
+                        onClick={() => {
+                          setSelectedNode(node);
+                          if (fgRef.current && node.x !== undefined && node.y !== undefined) {
+                            fgRef.current.centerAt(node.x, node.y, 1000);
+                            fgRef.current.zoom(4, 1000);
+                          } else if (fgRef.current) {
+                            fgRef.current.zoomToFit(600);
+                          }
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>&gt; {node.name}</span>
+                          <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', border: '1px solid var(--border-color)', padding: '1px 4px', flexShrink: 0 }}>{node.group}</span>
+                        </div>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: 2 }}>
+                          {node.observations.length} obs • {data.links.filter(l => l.source === node.id || l.target === node.id || (l.source as any).id === node.id || (l.target as any).id === node.id).length} links
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <List height={420} itemCount={filteredNodes.length} itemSize={56} width="100%" style={{ overflowX: 'hidden' }}>
+                  {({ index, style }: { index: number; style: React.CSSProperties }) => {
+                    const node = filteredNodes[index];
+                    const isSelected = selectedNode?.id === node.id;
+                    return (
+                      <div style={{ ...style, paddingRight: 6, boxSizing: 'border-box' }}>
+                        <div
+                          className="search-result-item"
+                          style={{
+                            borderColor: isSelected ? 'var(--accent-color)' : 'transparent',
+                            color: isSelected ? 'var(--text-primary)' : undefined,
+                            background: isSelected ? 'rgba(0, 255, 0, 0.08)' : undefined,
+                            height: 52
+                          }}
+                          onClick={() => {
+                            setSelectedNode(node);
+                            if (fgRef.current && node.x !== undefined && node.y !== undefined) {
+                              fgRef.current.centerAt(node.x, node.y, 1000);
+                              fgRef.current.zoom(4, 1000);
+                            } else if (fgRef.current) {
+                              fgRef.current.zoomToFit(600);
+                            }
+                          }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>&gt; {node.name}</span>
+                            <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', border: '1px solid var(--border-color)', padding: '1px 4px', flexShrink: 0 }}>{node.group}</span>
+                          </div>
+                          <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: 2 }}>
+                            {node.observations.length} obs
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }}
+                </List>
+              )}
             </div>
           )}
         </div>
@@ -326,6 +420,10 @@ function App() {
         <ForceGraph2D
           ref={fgRef}
           graphData={data}
+          cooldownTicks={data.nodes.length > 1000 ? 0 : 100}
+          d3AlphaDecay={data.nodes.length > 1000 ? 1 : 0.0228}
+          d3VelocityDecay={data.nodes.length > 1000 ? 1 : 0.4}
+          warmupTicks={data.nodes.length > 1000 ? 0 : 0}
           nodeRelSize={4}
           nodeVal="val"
           nodeLabel={(node: any) => node.isCluster ? `${node.parentId} — ${node.clusterCount} observations (click to expand)` : node.id}

@@ -213,6 +213,11 @@ export const SearchNodesSchema = z.object({
   mode: z.enum(['keyword', 'vector', 'hybrid']).default('keyword').optional(),
 });
 
+export const ReadGraphStreamSchema = z.object({
+  cursor: z.string().optional(),
+  limit: z.number().int().min(1).max(1000).default(500).optional(),
+});
+
 export const ReadGraphSchema = z.object({
   database: z.enum(['project', 'central']).optional(),
   limit: z.number().int().min(1).max(10000).optional(),

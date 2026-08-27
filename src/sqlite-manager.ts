@@ -71,11 +71,12 @@ export class SQLiteManager {
     const dbPath = this.getDatabasePath(name);
     const db = new sqlite3.Database(dbPath);
     this.connections.set(name, db);
-    // Performance: WAL + NORMAL sync + memory temp, 5s busy timeout
+    // Performance: WAL + NORMAL + 64MB cache + 64MB journal cap + memory temp
     try {
       await this.runQuery(db, 'PRAGMA journal_mode=WAL');
       await this.runQuery(db, 'PRAGMA synchronous=NORMAL');
       await this.runQuery(db, 'PRAGMA cache_size=-64000');
+      await this.runQuery(db, 'PRAGMA journal_size_limit=67108864');
       await this.runQuery(db, 'PRAGMA temp_store=MEMORY');
       await this.runQuery(db, 'PRAGMA busy_timeout=5000');
     } catch {}
@@ -735,6 +736,11 @@ export class SQLiteManager {
         });
       });
     }
+  }
+
+  async vacuumDatabase(name: string): Promise<void> {
+    const db = await this.getConnection(name);
+    await this.runQuery(db, 'VACUUM');
   }
 
   async closeAllConnections(): Promise<void> {

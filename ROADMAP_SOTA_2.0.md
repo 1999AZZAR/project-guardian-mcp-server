@@ -14,10 +14,10 @@ From niche SOTA (local-first Git-aware knowledge graph) to universal SOTA (hybri
 - [x] Risks: `sqlite-vec` `import.meta.resolve` Jest fix via `createRequire`, mock `Float32Array` realm fix, 7.6MB/5k cap noted
 - [x] Accept: `hybrid` finds semantic miss (`authentication` → `auth-login` top, `93/93` tests, `e2e` `2/2` pass, `b4d4b1d`)
 
-## Phase 2 — Scale & Streaming (5-7d)
-- [ ] `read_graph_stream` cursor `{updated_at, name}` paginated 500/page, `GET /api/graph?cursor=`
-- [ ] DB: `journal_size_limit`, monthly `VACUUM`
-- [ ] UI LOD: auto-collapse >300, `deck.gl` WebGL >1k, `react-window` list
+## Phase 2 — Scale & Streaming (5-7d) — **DONE in feat/phase2-scale fa033ec+ (streaming+LOD+virtual+VACUUM)**
+- [x] `read_graph_stream` cursor `{updated_at, name}` paginated 500/page, `GET /api/graph/stream?cursor=&limit=` (merged central, project still `limit/offset`, UI wires streaming for central incremental)
+- [x] DB: `journal_size_limit=64M` (`PRAGMA journal_size_limit=67108864`) + monthly `VACUUM` (`vacuumDatabases()` self-schedules 30d + `POST /api/vacuum`)
+- [x] UI LOD: auto-collapse >300 (cluster, >400 disable orbs), `react-window` virtual list (>50 → `FixedSizeList 420h 56h`), `>1k` physics freeze (`cooldownTicks 0 d3AlphaDecay 1` — deck.gl WebGL TODO for 10k)
 
 ## Phase 3 — Collab/Auth (7-10d, optional)
 - [ ] `Litestream` → S3/R2 replica (opt-in)
@@ -34,4 +34,4 @@ From niche SOTA (local-first Git-aware knowledge graph) to universal SOTA (hybri
 - [x] Branch `feat/vector-rag-poc` created `2772572` + `b4d4b1d` e2e + `673a238` backfill/UI wiring — POC done, todo updated first per user, no merge to master yet
 
 ## References
-- Current (feat): 33 tools, 93 tests (91+2 e2e), 0 vulns (master) / 5 vulns (feat with @xenova), WAL, pagination, `c2085a3` flex, `0398ef8` mobile gate, `2d93547` always-list, `COU8SsoH.js` hybrid search UI, `105/76` vec backfilled
+- Current (feat/phase2-scale): 34 tools (33+vacuum/stream), 93 tests (91+2 e2e), 0 vulns (master) / 5 vulns (feat with @xenova), WAL+64M cap+VACUUM, cursor stream 500/page, LOD auto-collapse+react-window 403k `B2DK7m-f.js`, `c2085a3` flex, `0398ef8` mobile gate

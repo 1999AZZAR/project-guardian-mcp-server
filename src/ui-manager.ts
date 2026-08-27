@@ -64,6 +64,26 @@ export class UIManager {
       }
     });
 
+    app.get('/api/graph/stream', async (req, res) => {
+      try {
+        const cursor = req.query.cursor ? String(req.query.cursor) : undefined;
+        const limit = req.query.limit ? Math.min(1000, Math.max(1, parseInt(String(req.query.limit), 10) || 500)) : 500;
+        const result = await this.memoryManager.readGraphStream(cursor, limit);
+        res.json(result);
+      } catch (err) {
+        res.status(500).json({ error: String(err) });
+      }
+    });
+
+    app.post('/api/vacuum', async (_req, res) => {
+      try {
+        await this.memoryManager.vacuumDatabases();
+        res.json({ ok: true });
+      } catch (err) {
+        res.status(500).json({ error: String(err) });
+      }
+    });
+
     // SPA fallback
     app.use((req, res) => {
       res.sendFile(join(uiPath, 'index.html'));
