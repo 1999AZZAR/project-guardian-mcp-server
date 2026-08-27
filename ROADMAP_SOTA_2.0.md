@@ -1,12 +1,12 @@
 # Project Guardian SOTA Roadmap — 1.1.0 → 2.0.0
 
-> Documented 2026-08-26 as TODO for review. No implementation yet.
+> Documented 2026-08-26 as TODO for review. Updated 2026-08-26: **Provider A chosen** (`@xenova/transformers` local). No implementation yet — todo only.
 
 ## Goal
 From niche SOTA (local-first Git-aware knowledge graph) to universal SOTA (hybrid RAG + streaming + observable).
 
-## Phase 1 — Vector Hybrid RAG (8-12d) — **NEXT**
-- [ ] Choose provider: **A** `@xenova/transformers` `all-MiniLM-L6-v2` (local 80MB, 384d) vs **B** OpenAI `text-embedding-3-small` (1536d)
+## Phase 1 — Vector Hybrid RAG (8-12d) — **NEXT — CHOSEN A (local)**
+- [x] **Chosen: A** `@xenova/transformers` `all-MiniLM-L6-v2` (local 80MB, 384d, offline) — decision 2026-08-26
 - [ ] Schema: `embeddings(entity_name PK, embedding BLOB, model TEXT, updated_at)` + `sqlite-vec0`
 - [ ] Worker: batch queue 10 obs / 100ms, on `createEntity`/`addObservation`/`updateData`
 - [ ] Hybrid: `RRF(BM25, cosine)` or `0.5*normBM25+0.5*cosine`, `search_nodes {mode, alpha, limit}` + `vector_search`
@@ -29,9 +29,9 @@ From niche SOTA (local-first Git-aware knowledge graph) to universal SOTA (hybri
 - [ ] OpenTelemetry spans
 - [ ] `2.0.0` breaking, CHANGELOG, CI audit gate
 
-## Decisions needed
-- [ ] Provider A vs B
-- [ ] Start Phase 1 branch `feat/vector-rag` ?
+## Decisions
+- [x] Provider **A** chosen 2026-08-26 (update todo only, no impl yet)
+- [ ] Start Phase 1 branch `feat/vector-rag` ? — pending user go-ahead
 
 ## References
 - Current: 33 tools, 91 tests, 0 vulns, WAL, pagination, `c2085a3` flex, `0398ef8` mobile gate, `2d93547` always-list
