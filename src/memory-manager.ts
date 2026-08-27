@@ -1,5 +1,6 @@
 import { SQLiteManager } from './sqlite-manager.js';
 import { Entity, Relation, KnowledgeGraph, SearchResult } from './types.js';
+import { embedText, toVecString } from './vector-manager.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import { exec, execFile, spawn } from 'child_process';
@@ -95,6 +96,9 @@ export class MemoryManager {
     });
     
     await this.ensureFtsSchema(this.centralDbPath);
+    try {
+      await this.sqliteManager.executeSql(this.centralDbPath, `CREATE VIRTUAL TABLE IF NOT EXISTS vec_entities USING vec0(embedding float[${384}])`);
+    } catch {}
   }
 
   private projectSchemaReady = false;
@@ -129,7 +133,28 @@ export class MemoryManager {
     const r2 = await this.sqliteManager.executeSql(this.memoryDbName, 'CREATE INDEX IF NOT EXISTS idx_entities_updated ON entities(updated_at)');
     if (!r2.success) console.warn('Failed to create entity updated index:', r2.error);
     await this.ensureFtsSchema(this.memoryDbName);
+    try {
+      await this.sqliteManager.executeSql(this.memoryDbName, `CREATE VIRTUAL TABLE IF NOT EXISTS vec_entities USING vec0(embedding float[384])`);
+    } catch {}
     this.projectSchemaReady = true;
+  }
+
+  private async upsertVec(dbName: string, entityName: string, text: string): Promise<void> {
+    if (process.env.NODE_ENV === 'test') return;
+    try {
+      const vec = await embedText(text);
+      const vecStr = toVecString(vec);
+      // rowid mapping to entities
+      const row = await this.sqliteManager.executeSql(dbName, `SELECT rowid FROM entities WHERE name=?`, [entityName]);
+      if (!row.success || !row.data || row.data.rows.length === 0) return;
+      const rowid = (row.data.rows[0] as any).rowid ?? (row.data.rows[0] as any).ROWID;
+      // vec0 upsert: delete then insert (vec0 has no UPDATE)
+      await this.sqliteManager.executeSql(dbName, `DELETE FROM vec_entities WHERE rowid=?`, [rowid]);
+      const ins = await this.sqliteManager.executeSql(dbName, `INSERT INTO vec_entities(rowid, embedding) VALUES (?, ?)`, [rowid, vecStr]);
+      if (!ins.success) throw new Error(ins.error);
+    } catch (e) {
+      console.warn(`vec upsert failed for ${entityName}:`, (e as Error).message);
+    }
   }
 
   async syncToCentral(): Promise<{ entities: number; relations: number }> {
@@ -467,6 +492,10 @@ export class MemoryManager {
       throw new Error(`Failed to create entity: ${insertResult.error || insertResult.message}`);
     }
 
+    // best-effort vector embed (name + observations)
+    const text = `${name} ${entityType} ${observations.join(' ')}`;
+    await this.upsertVec(this.memoryDbName, name, text);
+
     return {
       name,
       entityType,
@@ -580,6 +609,10 @@ export class MemoryManager {
       }
     );
 
+    // re-embed with updated observations
+    const text = `${entityName} ${entity.entity_type} ${updatedObservations.join(' ')}`;
+    await this.upsertVec(this.memoryDbName, entityName, text);
+
     return {
       name: entity.name,
       entityType: entity.entity_type,
@@ -614,12 +647,21 @@ export class MemoryManager {
 
   async deleteEntity(entityName: string): Promise<void> {
     if (!this.projectSchemaReady) await this.ensureProjectSchema();
+    // capture rowid for vec before delete
+    let rowid: number | null = null;
+    try {
+      const r = await this.sqliteManager.executeSql(this.memoryDbName, `SELECT rowid FROM entities WHERE name=?`, [entityName]);
+      if (r.success && r.data && r.data.rows.length > 0) rowid = (r.data.rows[0] as any).rowid;
+    } catch {}
     await this.sqliteManager.executeSql(this.memoryDbName, 'BEGIN TRANSACTION');
     try {
       await this.sqliteManager.deleteData(this.memoryDbName, 'relations',
         { from_entity: entityName });
       await this.sqliteManager.deleteData(this.memoryDbName, 'relations',
         { to_entity: entityName });
+      if (rowid !== null) {
+        try { await this.sqliteManager.executeSql(this.memoryDbName, `DELETE FROM vec_entities WHERE rowid=?`, [rowid]); } catch {}
+      }
       await this.sqliteManager.deleteData(this.memoryDbName, 'entities',
         { name: entityName });
       await this.sqliteManager.executeSql(this.memoryDbName, 'COMMIT');
@@ -658,6 +700,9 @@ export class MemoryManager {
         updated_at: now
       }
     );
+
+    const text = `${entityName} ${entity.entity_type} ${updatedObservations.join(' ')}`;
+    await this.upsertVec(this.memoryDbName, entityName, text);
 
     return {
       name: entity.name,
@@ -784,9 +829,66 @@ export class MemoryManager {
     ]);
   }
 
-  async searchNodes(query: string, limit: number = 20): Promise<SearchResult> {
+  private async vecSearchDb(dbName: string, query: string, limit: number): Promise<Entity[]> {
+    if (process.env.NODE_ENV === 'test') return [];
+    try {
+      const vec = await embedText(query);
+      const vecStr = toVecString(vec);
+      // vec0 KNN: embedding MATCH vecStr
+      const sql = `SELECT e.* FROM entities e JOIN (SELECT rowid, distance FROM vec_entities WHERE embedding MATCH ? ORDER BY distance LIMIT ${limit}) v ON e.rowid = v.rowid`;
+      const res = await this.sqliteManager.executeSql(dbName, sql, [vecStr]);
+      if (!res.success || !res.data) return [];
+      return res.data.rows.map((row: any) => this.rowToEntity(row));
+    } catch (e) {
+      console.warn(`vec search failed for ${dbName}:`, (e as Error).message);
+      return [];
+    }
+  }
+
+  private async searchRelationsBoth(query: string): Promise<Relation[]> {
+    const searchTerm = `%${query.toLowerCase()}%`;
+    const relationsQuery = `SELECT * FROM relations WHERE LOWER(relation_type) LIKE ? OR LOWER(from_entity) LIKE ? OR LOWER(to_entity) LIKE ?`;
+    const [pr, cr] = await Promise.all([
+      this.sqliteManager.executeSql(this.memoryDbName, relationsQuery, [searchTerm, searchTerm, searchTerm]),
+      this.sqliteManager.executeSql(this.centralDbPath, relationsQuery, [searchTerm, searchTerm, searchTerm])
+    ]);
+    const toRels = (r: any) => (r.success && r.data) ? r.data.rows.map((row: any) => this.rowToRelation(row)) : [];
+    return [...toRels(pr), ...toRels(cr)];
+  }
+
+  async searchNodes(query: string, limit: number = 20, mode: string = 'keyword'): Promise<SearchResult> {
     const cappedLimit = Math.min(Math.max(limit, 1), 100);
-    // Sanitize query to prevent FTS syntax errors
+    const effMode = (mode as string) || 'keyword';
+    if (effMode === 'vector') {
+      const [p, c] = await Promise.all([this.vecSearchDb(this.memoryDbName, query, cappedLimit), this.vecSearchDb(this.centralDbPath, query, cappedLimit)]);
+      const rels = await this.searchRelationsBoth(query);
+      return this.mergeGraphs([{ entities: p, relations: [] }, { entities: c, relations: [] }, { entities: [], relations: rels }]);
+    }
+    if (effMode === 'hybrid') {
+      // FTS + vector RRF
+      const fts = await this.searchNodes(query, cappedLimit, 'keyword');
+      const vecP = await this.vecSearchDb(this.memoryDbName, query, cappedLimit);
+      const vecC = await this.vecSearchDb(this.centralDbPath, query, cappedLimit);
+      const vecEntities = [...vecP, ...vecC];
+      // RRF k=60
+      const k = 60;
+      const scores = new Map<string, { e: Entity; score: number }>();
+      const ftsList = fts.entities;
+      ftsList.forEach((e, i) => {
+        const s = 1 / (k + i + 1);
+        scores.set(e.name, { e, score: s });
+      });
+      vecEntities.forEach((e, i) => {
+        const s = 1 / (k + i + 1);
+        const prev = scores.get(e.name);
+        if (prev) prev.score += s;
+        else scores.set(e.name, { e, score: s });
+      });
+      const ranked = [...scores.values()].sort((a, b) => b.score - a.score).slice(0, cappedLimit).map(v => v.e);
+      // relations from keyword search
+      return { entities: ranked, relations: fts.relations };
+    }
+    // keyword default
     const sanitizedQuery = query.replace(/[^a-zA-Z0-9_\s]/g, ' ').trim().replace(/\s+/g, ' OR ');
     
     // Fallback to basic LIKE if query is empty after sanitization

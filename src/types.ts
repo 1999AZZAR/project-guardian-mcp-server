@@ -210,6 +210,7 @@ export const DeleteRelationsSchema = z.object({
 export const SearchNodesSchema = z.object({
   query: z.string().min(1),
   limit: z.number().int().min(1).max(100).default(20).optional(),
+  mode: z.enum(['keyword', 'vector', 'hybrid']).default('keyword').optional(),
 });
 
 export const ReadGraphSchema = z.object({

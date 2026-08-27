@@ -79,6 +79,12 @@ export class SQLiteManager {
       await this.runQuery(db, 'PRAGMA temp_store=MEMORY');
       await this.runQuery(db, 'PRAGMA busy_timeout=5000');
     } catch {}
+    // Vector extension — best-effort, for vec0 KNN
+    try {
+      const vec: any = await import('sqlite-vec');
+      if (vec.load) vec.load(db);
+      else if (vec.default?.load) vec.default.load(db);
+    } catch {}
     return db;
   }
 

@@ -291,7 +291,7 @@ export class RequestHandlers {
       }
 
       case 'search_nodes': {
-        const searchResult = await this.memoryManager.searchNodes(args.query, args.limit);
+        const searchResult = await this.memoryManager.searchNodes(args.query, args.limit, args.mode);
         return { success: true, data: searchResult };
       }
 
