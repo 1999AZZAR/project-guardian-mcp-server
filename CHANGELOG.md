@@ -2,6 +2,18 @@
 
 All notable changes to Project Guardian MCP.
 
+## [2.0.0-beta-1] - 2026-08-27
+
+### Added
+- **Vector Hybrid RAG (POC)** — `sqlite-vec` `vec0(embedding float[384])` + `@xenova/transformers` `all-MiniLM-L6-v2` local 384d (`2772572`), `vector-manager.ts` lazy pipeline, `ensureProjectSchema`/`ensureCentralSchema` vec table + `createRequire` Jest fix
+- **MCP: `search_nodes` hybrid** — `mode: keyword|vector|hybrid` (default `hybrid` RRF `k=60` merging FTS BM25 + vec cosine), `vectorSearch` KNN `MATCH`, `GET /api/search?q=&mode=&limit=` (`673a238`)
+- **UI: Hybrid search** — `SEARCH ENTITIES` now `fetch /api/search` when `q≥2` with `HYBRID|KEYWORD|VECTOR` select, `filteredNodes = searchResults ?? baseFiltered` (`COU8SsoH.js`)
+- **Backfill** — `scripts/backfill_vec.mjs` real embeddings `central 105` + `project 76` vec rows
+- **E2E** — `__tests__/e2e-vector.test.ts` `2/2` pass, `93/93` total, mock `Float32Array` realm fix
+
+### Fixed
+- **Jest vec load** — `import.meta.resolve` failure via `createRequire` fallback for `sqlite-vec` (`b4d4b1d`)
+
 ## [1.1.0] - 2026-08-26
 
 ### Added
