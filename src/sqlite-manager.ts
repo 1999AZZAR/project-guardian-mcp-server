@@ -79,12 +79,27 @@ export class SQLiteManager {
       await this.runQuery(db, 'PRAGMA temp_store=MEMORY');
       await this.runQuery(db, 'PRAGMA busy_timeout=5000');
     } catch {}
-    // Vector extension — best-effort, for vec0 KNN
+    // Vector extension — best-effort, for vec0 KNN (Jest's import.meta.resolve fails, so use createRequire fallback)
     try {
-      const vec: any = await import('sqlite-vec');
-      if (vec.load) vec.load(db);
-      else if (vec.default?.load) vec.default.load(db);
-    } catch {}
+      const { createRequire } = await import('module');
+      const require = createRequire(import.meta.url);
+      const plat = process.platform;
+      const arc = process.arch;
+      const ext = plat === 'win32' ? 'dll' : plat === 'darwin' ? 'dylib' : 'so';
+      const pkgName = `sqlite-vec-${plat === 'win32' ? 'windows' : plat}-${arc}`;
+      const loadablePath = require.resolve(`${pkgName}/vec0.${ext}`);
+      // @ts-ignore - loadExtension may not be typed
+      (db as any).loadExtension(loadablePath);
+    } catch (e) {
+      // fallback to package's loader (may fail in Jest due to import.meta.resolve)
+      try {
+        const vec: any = await import('sqlite-vec');
+        if (vec.load) vec.load(db);
+        else if (vec.default?.load) vec.default.load(db);
+      } catch (e2) {
+        console.warn('[vec] load failed for', name, (e2 as Error).message);
+      }
+    }
     return db;
   }
 

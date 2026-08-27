@@ -133,14 +133,13 @@ export class MemoryManager {
     const r2 = await this.sqliteManager.executeSql(this.memoryDbName, 'CREATE INDEX IF NOT EXISTS idx_entities_updated ON entities(updated_at)');
     if (!r2.success) console.warn('Failed to create entity updated index:', r2.error);
     await this.ensureFtsSchema(this.memoryDbName);
-    try {
-      await this.sqliteManager.executeSql(this.memoryDbName, `CREATE VIRTUAL TABLE IF NOT EXISTS vec_entities USING vec0(embedding float[384])`);
-    } catch {}
+    const vecRes = await this.sqliteManager.executeSql(this.memoryDbName, `CREATE VIRTUAL TABLE IF NOT EXISTS vec_entities USING vec0(embedding float[384])`);
+    if (!vecRes.success) console.warn('[vec] create table failed for', this.memoryDbName, vecRes.error);
     this.projectSchemaReady = true;
   }
 
   private async upsertVec(dbName: string, entityName: string, text: string): Promise<void> {
-    if (process.env.NODE_ENV === 'test') return;
+    if (process.env.NODE_ENV === 'test' && !process.env.ENABLE_VECTOR_TEST) return;
     try {
       const vec = await embedText(text);
       const vecStr = toVecString(vec);
@@ -830,7 +829,7 @@ export class MemoryManager {
   }
 
   private async vecSearchDb(dbName: string, query: string, limit: number): Promise<Entity[]> {
-    if (process.env.NODE_ENV === 'test') return [];
+    if (process.env.NODE_ENV === 'test' && !process.env.ENABLE_VECTOR_TEST) return [];
     try {
       const vec = await embedText(query);
       const vecStr = toVecString(vec);
