@@ -75,6 +75,15 @@ export class UIManager {
       }
     });
 
+    app.post('/api/vacuum', async (_req, res) => {
+      try {
+        await this.memoryManager.vacuumDatabases();
+        res.json({ ok: true });
+      } catch (err) {
+        res.status(500).json({ error: String(err) });
+      }
+    });
+
     // SPA fallback
     app.use((req, res) => {
       res.sendFile(join(uiPath, 'index.html'));

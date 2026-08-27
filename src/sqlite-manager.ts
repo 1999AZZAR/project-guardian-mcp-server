@@ -738,6 +738,11 @@ export class SQLiteManager {
     }
   }
 
+  async vacuumDatabase(name: string): Promise<void> {
+    const db = await this.getConnection(name);
+    await this.runQuery(db, 'VACUUM');
+  }
+
   async closeAllConnections(): Promise<void> {
     const closePromises = Array.from(this.connections.keys()).map(name => this.closeConnection(name));
     await Promise.all(closePromises);

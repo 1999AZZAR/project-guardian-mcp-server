@@ -828,6 +828,13 @@ export class MemoryManager {
     ]);
   }
 
+  async vacuumDatabases(): Promise<void> {
+    await this.sqliteManager.vacuumDatabase(this.memoryDbName);
+    await this.sqliteManager.vacuumDatabase(this.centralDbPath);
+    // schedule next monthly VACUUM (30d) - fire-and-forget
+    setTimeout(() => this.vacuumDatabases().catch(() => {}), 30 * 24 * 60 * 60 * 1000);
+  }
+
   async readGraphStream(cursor?: string, limit: number = 500): Promise<{ entities: Entity[]; relations: Relation[]; nextCursor: string | null }> {
     const capped = Math.min(Math.max(limit, 1), 1000);
     let decoded: { updated_at: string; name: string } | null = null;
