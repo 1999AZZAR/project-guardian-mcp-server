@@ -1,6 +1,6 @@
 # Project Guardian SOTA Roadmap — 1.1.0 → 2.0.0
 
-> Documented 2026-08-26 as TODO. Updated 2026-08-27: **Provider A chosen** + **POC done** `b4d4b1d`/`673a238` + **merged to master** `f7876bf` as **2.0.0-beta-1** `6948910` (`v2.0.0-beta-1` tag).
+> Documented 2026-08-26 as TODO. Updated 2026-08-27: **Provider A chosen** + **POC done** `b4d4b1d`/`673a238` + **merged to master** `f7876bf` as **2.0.0-beta-1** `6948910` + **Phase 2 done** `fa033ec`/`c2dd6ca`/`e43ca01` as **2.0.0-beta-2** `6fa5d90` (`v2.0.0-beta-2` tag, branches pruned).
 
 ## Goal
 From niche SOTA (local-first Git-aware knowledge graph) to universal SOTA (hybrid RAG + streaming + observable).
@@ -31,7 +31,8 @@ From niche SOTA (local-first Git-aware knowledge graph) to universal SOTA (hybri
 
 ## Decisions
 - [x] Provider **A** chosen 2026-08-26
-- [x] Branch `feat/vector-rag-poc` created `2772572` + `b4d4b1d` e2e + `673a238` backfill/UI wiring — POC done, todo updated first per user, no merge to master yet
+- [x] Branch `feat/vector-rag-poc` created `2772572` + `b4d4b1d` e2e + `673a238` backfill/UI wiring — POC done, merged `f7876bf` to `master` for `2.0.0-beta-1`
+- [x] Branch `feat/phase2-scale` `fa033ec` + `c2dd6ca` streaming/LOD/vacuum — merged `e43ca01` to `master` for `2.0.0-beta-2`, branches deleted
 
 ## References
-- Current (feat/phase2-scale): 34 tools (33+vacuum/stream), 93 tests (91+2 e2e), 0 vulns (master) / 5 vulns (feat with @xenova), WAL+64M cap+VACUUM, cursor stream 500/page, LOD auto-collapse+react-window 403k `B2DK7m-f.js`, `c2085a3` flex, `0398ef8` mobile gate
+- Current (master `6fa5d90` `2.0.0-beta-2`): 34 tools (7 DB +10 memory +1 guidance +12 runtime +4 UI/stream), 10 suites 93 tests (91+2 e2e), 0 vulns (master audit 0, feat 5 with @xenova before prune), WAL+64M cap+VACUUM+`POST /api/vacuum`, cursor stream 500/page `GET /api/graph/stream`, LOD auto-collapse `>300` + `react-window` `403k B2DK7m-f.js`, `c2085a3` flex, `0398ef8` mobile gate

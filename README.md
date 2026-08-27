@@ -1,6 +1,6 @@
 # Project Guardian MCP
 
-A Model Context Protocol (MCP) server for persistent project memory, knowledge-graph operations, SQLite data access, runtime security checks, and guided project-management workflows. The current registry exposes 33 tools, 11 resources, and 27 prompts.
+A Model Context Protocol (MCP) server for persistent project memory, knowledge-graph operations, SQLite data access, runtime security checks, and guided project-management workflows. The current registry exposes 34 tools, 11 resources, and 27 prompts.
 
 ![Blotcat — guardian on duty, wiring the knowledge graph from memory.db](assets/blotcat-hero.jpg)
 
@@ -19,7 +19,7 @@ A Model Context Protocol (MCP) server for persistent project memory, knowledge-g
   - [Database Operations (7 tools)](#database-operations-7-tools)
   - [Memory and Guidance Tools (11 tools)](#memory-and-guidance-tools-11-tools)
   - [Runtime Companion Tools (12 tools)](#runtime-companion-tools-12-tools)
-  - [UI Tools (3 tools)](#ui-tools-3-tools)
+  - [UI Tools (4 tools)](#ui-tools-3-tools)
 - [AI Guidance System](#ai-guidance-system)
   - [Available Resources](#available-resources)
   - [Available Prompts](#available-prompts)
@@ -51,7 +51,7 @@ A Model Context Protocol (MCP) server for persistent project memory, knowledge-g
 - **Daily Central Backups**: On the first sync of each day, the central database is snapshotted to `~/memory/backup/ddmmyyyy_memory.db`; the seven most recent backups are kept and older ones pruned automatically. On first run, a legacy `~/memory.db` in the home directory is migrated into the new layout and used to seed the first backup
 - **On-Demand Pre-Commit Setup**: Nothing is installed at startup. Call `setup_pre_commit` when you want a generated `.pre-commit-config.yaml` and Git hooks in the active project
 
-- **On-Demand Web UI**: Launch a terminal-themed interactive node graph via `start_ui` (and `close_ui`/`stop_ui` to free the port) to visually pan, search, and explore the project state. Desktop-only with mobile gate (`<768px` overlay), always-visible entity browser, clustered amber orbs → expand to cyan per-observation, paginated `/api/graph?limit=&offset=`.
+- **On-Demand Web UI**: Launch a terminal-themed interactive node graph via `start_ui` (and `close_ui`/`stop_ui` to free the port) to visually pan, search, and explore the project state. Desktop-only with mobile gate (`<768px` overlay), always-visible entity browser, clustered amber orbs → expand to cyan per-observation, cursor-streamed `GET /api/graph/stream?cursor=&limit=500` + `react-window` virtual list, `>1k` physics freeze.
 
 ### Streamlined Database Operations
 
@@ -60,7 +60,7 @@ A Model Context Protocol (MCP) server for persistent project memory, knowledge-g
 - **Core CRUD**: Essential database operations (query, insert, update, delete)
 - **SQL Execution**: Direct SQL query execution
 - **Data Transfer**: Import/export CSV and JSON files
-- **33 Tools Total**: Seven database tools, ten memory tools, one guidance tool, twelve runtime companion tools, and three UI tools (`start_ui`, `close_ui`, `stop_ui`)
+- **34 Tools Total**: Seven database tools, ten memory tools, one guidance tool, twelve runtime companion tools, and four UI/stream tools (`start_ui`, `close_ui`, `stop_ui`, `read_graph_stream`)
 
 ### Runtime Companion Integration
 
@@ -91,16 +91,16 @@ AgentSkills provide host-side workflows and instructions. The MCP runtime implem
 ### Advanced Features
 - **Schema Validation**: Comprehensive input validation with Zod schemas
 - **Error Handling**: Detailed error messages and graceful failure handling
-- **Connection Management**: Bounded 20-connection LRU cache with `WAL` + `synchronous=NORMAL` + `cache_size=-64000` + `busy_timeout=5000` and shutdown cleanup
+- **Connection Management**: Bounded 20-connection LRU cache with `WAL` + `synchronous=NORMAL` + `cache_size=-64000` + `journal_size_limit=67108864` + `temp_store=MEMORY` + `busy_timeout=5000`, monthly `VACUUM` (`POST /api/vacuum`) and shutdown cleanup
 - **File Integration**: CSV and SQL imports are streamed; CSV writes use bounded string assembly
-- **Result Limits & Pagination**: Unbounded raw `SELECT` capped at 10,000 rows; `read_graph`/`readStore` default `5000` with `?limit=&offset=` (UI paginated), `search_nodes` capped 100
+- **Result Limits & Pagination**: Unbounded raw `SELECT` capped at 10,000 rows; `read_graph`/`readStore` default `5000` with `?limit=&offset=`, `read_graph_stream` cursor `500/page` via `GET /api/graph/stream?cursor=&limit=&` + `POST /api/vacuum`, `search_nodes` capped 100 (hybrid RRF `k=60`)
 
 ### Enterprise Features
 - **TypeScript**: Fully typed with comprehensive error handling
 - **Input Validation**: Zod schema validation for all parameters
 - **Error Recovery**: Graceful error handling with detailed error messages
 - **Resource Management**: Automatic cleanup of connections and resources
-- **Testing**: Nine Jest suites with 91 passing tests (`WAL` + pagination + `close_ui`)
+- **Testing**: Ten Jest suites with 93 passing tests (`WAL` + pagination + `close_ui` + `read_graph_stream` + `e2e-vector hybrid`)
 
 ## Requirements
 
@@ -159,7 +159,7 @@ When you pull new updates or modify the code, you must rebuild the server and re
 
 ![Blotcat opening a large toolbox with three labeled drawers, holding a wrench](assets/blotcat-tool-categories.jpg)
 
-This MCP server currently provides **33 tools**:
+This MCP server currently provides **34 tools**:
 
 ### Database Operations (7 tools)
 
@@ -372,7 +372,7 @@ Run a timeout-limited Trivy scan and return bounded HIGH/CRITICAL vulnerability 
 
 Project scan paths are restricted to the current Git workspace. Redis tools connect lazily and return an unavailable error when `REDIS_URL` is unset. Container scanning remains unavailable until Trivy is installed. Read `project-guardian://companions/catalog` for current capability health.
 
-### UI Tools (3 tools)
+### UI Tools (4 tools)
 
 #### `start_ui`
 Start the on-demand Project Guardian Web UI server to visually browse the knowledge graph in your browser. It automatically finds a free port (default `3000`, tries `3001…` on collision) and returns the local HTTP URL. The UI serves the CRT-themed force graph from `ui/dist` with correct static-path fallback (`ui/dist` → `MCPservers/.../ui/dist`).
@@ -881,7 +881,7 @@ project-guardian-mcp-server/
 
 - **server.ts**: MCP server lifecycle, transport, handlers, and shutdown coordination
 - **handlers/request-handlers.ts**: Central dispatcher routing tool calls to appropriate managers
-- **tools/**: Tool definition and registration system (33 tools total)
+- **tools/**: Tool definition and registration system (34 tools total)
   - `tool-registry.ts`: Lists all available tools (7 DB + 10 memory + 1 guidance + 12 runtime + 3 UI)
   - `database-tools.ts`: Database operation schemas (7 tools)
   - `memory-tools.ts`: Memory management schemas (10 tools)

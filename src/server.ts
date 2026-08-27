@@ -89,7 +89,7 @@ export class DatabaseMCPServer {
     this.server = new Server(
       {
         name: 'project-guardian-mcp',
-        version: '1.0.0',
+        version: '2.0.0-beta-2',
       },
       {
         capabilities: {
