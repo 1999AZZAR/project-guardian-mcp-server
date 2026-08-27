@@ -136,6 +136,12 @@ Use these prefixes for consistent, queryable observations:
 4. `create_relation` → dependent tasks with `depends_on`
 5. `add_observation` → sprint goals and capacity
 
+## New in 2.0.0-beta-2 (Phase 2)
+
+- **Hybrid search** — `search_nodes {query, mode: 'keyword'|'vector'|'hybrid' (default hybrid RRF k=60), limit}` merges FTS BM25 + `vec0` cosine via `all-MiniLM-L6-v2` 384d; use `mode: hybrid` for semantic finds (`GET /api/search?q=&mode=&limit=` also available)
+- **Cursor streaming** — for large graphs use `read_graph_stream {cursor, limit 500}` / `GET /api/graph/stream?cursor=&limit=500` (cursor = base64url `{updated_at,name}`), UI auto-streams central 500/page; `read_graph` still supports `limit/offset` 5000 default
+- **DB maintenance** — `journal_size_limit 64M` + monthly `VACUUM` via `POST /api/vacuum` (self-schedules 30d)
+
 ## Performance Rules
 
 - **Batch entity creation** when setting up (pass array to `create_entity`)
