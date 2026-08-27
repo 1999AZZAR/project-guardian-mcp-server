@@ -828,6 +828,51 @@ export class MemoryManager {
     ]);
   }
 
+  async readGraphStream(cursor?: string, limit: number = 500): Promise<{ entities: Entity[]; relations: Relation[]; nextCursor: string | null }> {
+    const capped = Math.min(Math.max(limit, 1), 1000);
+    let decoded: { updated_at: string; name: string } | null = null;
+    if (cursor) {
+      try {
+        const json = Buffer.from(cursor, 'base64url').toString('utf8');
+        decoded = JSON.parse(json);
+      } catch {}
+    }
+    // Use updated_at DESC, name ASC as tie-breaker
+    const whereClause = decoded ? `WHERE (updated_at < ? OR (updated_at = ? AND name > ?))` : '';
+    const params: any[] = decoded ? [decoded.updated_at, decoded.updated_at, decoded.name] : [];
+    const projSql = `SELECT * FROM entities ${whereClause} ORDER BY updated_at DESC, name ASC LIMIT ${capped + 1}`;
+    const [projRes, centRes] = await Promise.all([
+      this.sqliteManager.executeSql(this.memoryDbName, projSql, params),
+      this.sqliteManager.executeSql(this.centralDbPath, projSql, params),
+    ]);
+    const toEnts = (r: any) => (r.success && r.data) ? r.data.rows.map((row: any) => this.rowToEntity(row)) : [];
+    let merged = this.mergeGraphs([{ entities: toEnts(projRes), relations: [] }, { entities: toEnts(centRes), relations: [] }]);
+    // Sort merged by updated_at DESC, name ASC and slice
+    merged.entities.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.name.localeCompare(b.name));
+    const hasMore = merged.entities.length > capped;
+    const page = hasMore ? merged.entities.slice(0, capped) : merged.entities;
+    let nextCursor: string | null = null;
+    if (hasMore && page.length > 0) {
+      const last = page[page.length - 1];
+      nextCursor = Buffer.from(JSON.stringify({ updated_at: last.updatedAt, name: last.name })).toString('base64url');
+    }
+    // Fetch relations for page entities (bounded)
+    const names = page.map(e => e.name);
+    let relations: Relation[] = [];
+    if (names.length > 0) {
+      const placeholders = names.map(() => '?').join(',');
+      const relSql = `SELECT * FROM relations WHERE from_entity IN (${placeholders}) OR to_entity IN (${placeholders}) LIMIT ${capped * 2}`;
+      const relParams = [...names, ...names];
+      const [pr, cr] = await Promise.all([
+        this.sqliteManager.executeSql(this.memoryDbName, relSql, relParams),
+        this.sqliteManager.executeSql(this.centralDbPath, relSql, relParams),
+      ]);
+      const toRels = (r: any) => (r.success && r.data) ? r.data.rows.map((row: any) => this.rowToRelation(row)) : [];
+      relations = [...toRels(pr), ...toRels(cr)];
+    }
+    return { entities: page, relations, nextCursor };
+  }
+
   private async vecSearchDb(dbName: string, query: string, limit: number): Promise<Entity[]> {
     if (process.env.NODE_ENV === 'test' && !process.env.ENABLE_VECTOR_TEST) return [];
     try {

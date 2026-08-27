@@ -28,6 +28,18 @@ export const allTools: Tool[] = [
     }
   },
   {
+    name: 'read_graph_stream',
+    description: 'Stream the knowledge graph with cursor pagination (500/page, updated_at DESC). Returns entities, relations, nextCursor.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        cursor: { type: 'string', description: 'Base64url cursor from previous nextCursor' },
+        limit: { type: 'number', description: 'Max entities per page (1-1000, default 500)' }
+      },
+      required: []
+    }
+  },
+  {
     name: 'stop_ui',
     description: 'Alias for close_ui — stop the Web UI server.',
     inputSchema: {
