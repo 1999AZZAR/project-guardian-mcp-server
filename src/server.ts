@@ -56,9 +56,9 @@ export class DatabaseMCPServer {
         dbPath = output;
         workspaceRoot = resolve(output);
       } catch {
-        const dataHome = process.env.XDG_DATA_HOME || join(homedir(), '.local', 'share');
-        dbPath = join(dataHome, 'project-guardian');
-        workspaceRoot = dbPath;
+        // Not inside a single git root (e.g. monorepo hub); use current working directory
+        workspaceRoot = resolve(process.cwd());
+        dbPath = workspaceRoot;
       }
     }
 
