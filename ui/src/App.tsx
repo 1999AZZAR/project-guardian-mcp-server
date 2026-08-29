@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { FixedSizeList as List } from 'react-window';
 import ForceGraph2D from 'react-force-graph-2d';
+// @ts-expect-error d3-force-3d untyped
+import { forceCollide } from 'd3-force-3d';
 import './App.css';
 
 interface Node {
@@ -212,6 +214,43 @@ function App() {
     return () => window.removeEventListener('resize', check);
   }, []);
 
+  // Configure D3 forces: compact neural network layout with strict zero-overlap collision
+  useEffect(() => {
+    if (fgRef.current) {
+      // 1. Precise physical collision radius (boundary shell preventing any orb overlap)
+      fgRef.current.d3Force('collide', forceCollide((node: any) => {
+        if (node.isCluster) {
+          return Math.max(4, (node.val || 1) * 3.2) + 3;
+        } else if (node.isObservation) {
+          return Math.max(1.5, (node.val || 1) * 2.2) + 2;
+        } else {
+          return Math.max(2, (node.val || 1) * 3) + 4;
+        }
+      }).strength(1.0).iterations(3));
+
+      // 2. Gentle local repulsion: keeps network cohesive without blowing nodes apart
+      const charge = fgRef.current.d3Force('charge');
+      if (charge) {
+        charge.strength((node: any) => {
+          if (node.isObservation && !node.isCluster) return -12;
+          if (node.isCluster) return -25;
+          return -45;
+        }).distanceMax(180);
+      }
+
+      // 3. Short, tight neural link distances
+      const link = fgRef.current.d3Force('link');
+      if (link) {
+        link.distance((l: any) => {
+          if (l.label === 'has_observation') return 16;
+          return 30;
+        }).strength(0.7);
+      }
+
+      fgRef.current.d3ReheatSimulation();
+    }
+  }, [data]);
+
   const entityCount = data.nodes.filter(n => !n.isObservation).length;
   const baseFiltered = data.nodes
     .filter(n => !n.isObservation)
@@ -420,10 +459,10 @@ function App() {
         <ForceGraph2D
           ref={fgRef}
           graphData={data}
-          cooldownTicks={data.nodes.length > 1000 ? 0 : 100}
-          d3AlphaDecay={data.nodes.length > 1000 ? 1 : 0.0228}
-          d3VelocityDecay={data.nodes.length > 1000 ? 1 : 0.4}
-          warmupTicks={data.nodes.length > 1000 ? 0 : 0}
+          cooldownTicks={data.nodes.length > 1000 ? 0 : 200}
+          d3AlphaDecay={data.nodes.length > 1000 ? 1 : 0.02}
+          d3VelocityDecay={data.nodes.length > 1000 ? 1 : 0.3}
+          warmupTicks={data.nodes.length > 1000 ? 0 : 40}
           nodeRelSize={4}
           nodeVal="val"
           nodeLabel={(node: any) => node.isCluster ? `${node.parentId} — ${node.clusterCount} observations (click to expand)` : node.id}
