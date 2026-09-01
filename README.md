@@ -1,5 +1,8 @@
 # Project Guardian MCP
 
+
+> **Part of the [HeLa MCP Ecosystem](https://github.com/1999AZZAR/hela-mcp-ecosystem)** — This server is **HeLa Genome (`hela-genome`)** — the *State & Memory* component of the HeLa cellular architecture. See the [ecosystem docs](https://github.com/1999AZZAR/hela-mcp-ecosystem) for profiles, workflows, and multi-client setup.
+
 A Model Context Protocol (MCP) server for persistent project memory, knowledge-graph operations, SQLite data access, runtime security checks, and guided project-management workflows. The current registry exposes 34 tools, 11 resources, and 27 prompts.
 
 ![Blotcat — guardian on duty, wiring the knowledge graph from memory.db](assets/blotcat-hero.jpg)
