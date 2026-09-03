@@ -1,7 +1,7 @@
 # Project Guardian MCP
 
 
-> **Part of the [HeLa MCP Ecosystem](https://github.com/1999AZZAR/hela-mcp-ecosystem)** — This server is **HeLa Genome (`hela-genome`)** — the *State & Memory* component of the HeLa cellular architecture. See the [ecosystem docs](https://github.com/1999AZZAR/hela-mcp-ecosystem) for profiles, workflows, and multi-client setup.
+> **Part of the [HeLa MCP Ecosystem](https://github.com/1999AZZAR/hela-hela-mcp-ecosystem)** — This server is **HeLa Genome (`hela-genome`)** — the *State & Memory* component of the HeLa cellular architecture. See the [ecosystem docs](https://github.com/1999AZZAR/hela-hela-mcp-ecosystem) for profiles, workflows, and multi-client setup.
 
 A Model Context Protocol (MCP) server for persistent project memory, knowledge-graph operations, SQLite data access, runtime security checks, and guided project-management workflows. The current registry exposes 34 tools, 11 resources, and 27 prompts.
 
@@ -117,8 +117,8 @@ AgentSkills provide host-side workflows and instructions. The MCP runtime implem
 
 1. **Clone the repository:**
 ```bash
-git clone https://github.com/1999AZZAR/project-guardian-mcp-server.git
-cd project-guardian-mcp-server
+git clone https://github.com/1999AZZAR/project-mcp.git
+cd project-mcp
 ```
 
 2. **Install dependencies:**
@@ -795,7 +795,7 @@ Add this server to your Cursor MCP configuration (`~/.cursor/mcp.json`). Replace
   "mcpServers": {
     "project-guardian": {
       "command": "node",
-      "args": ["/path/to/project-guardian-mcp-server/dist/index.js"],
+      "args": ["/path/to/project-mcp/dist/index.js"],
       "env": {
         "GUARDIAN_PROJECT_ROOT": "/path/to/your/project"
       }
@@ -813,7 +813,7 @@ Add this server to your Claude Desktop configuration (`claude_desktop_config.jso
   "mcpServers": {
     "project-guardian": {
       "command": "node",
-      "args": ["/path/to/project-guardian-mcp-server/dist/index.js"],
+      "args": ["/path/to/project-mcp/dist/index.js"],
       "env": {
         "GUARDIAN_PROJECT_ROOT": "/path/to/your/project"
       }
@@ -825,7 +825,7 @@ Add this server to your Claude Desktop configuration (`claude_desktop_config.jso
 ## Project Structure
 
 ```
-project-guardian-mcp-server/
+project-mcp/
 ├── src/
 │   ├── index.ts              # Main entry point
 │   ├── server.ts             # MCP server orchestrator
@@ -916,8 +916,8 @@ The database tools (`execute_sql`, `query_data`, `insert_data`, `update_data`, `
 
 1. **Clone the repository:**
 ```bash
-git clone https://github.com/1999AZZAR/project-guardian-mcp-server.git
-cd project-guardian-mcp-server
+git clone https://github.com/1999AZZAR/project-mcp.git
+cd project-mcp
 ```
 
 2. **Install dependencies:**
